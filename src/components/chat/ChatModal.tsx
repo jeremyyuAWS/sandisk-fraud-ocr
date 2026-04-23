@@ -37,7 +37,7 @@ interface ChatModalProps {
   onImageUploaded?: (url: string) => void
   lyzrConfig: LyzrAgentConfig
   isLyzrConfigured: boolean
-  onResetSession: () => void
+  onResetSession: () => string
   onAddLog: (log: LogEntry) => void
   onRawWsEvent?: (event: RawWsEvent) => void
 }
@@ -770,8 +770,14 @@ export function ChatModal({
     setMessages((prev) => [...prev, { from, component, timestamp: now() }])
   }
 
+  function resetAndSync() {
+    const newSessionId = onResetSession()
+    lyzrConfigRef.current = { ...lyzrConfigRef.current, sessionId: newSessionId }
+    return newSessionId
+  }
+
   function handleNewSession() {
-    onResetSession()
+    resetAndSync()
     ws.disconnect()
     ws.clearEvents()
     setMessages([])
@@ -783,6 +789,7 @@ export function ChatModal({
 
   // Welcome -> conversation
   function startConversation() {
+    resetAndSync()
     setShowWelcome(false)
     if (!isLyzrConfigured) {
       addMsg("bot", "Hello! Welcome to SanDisk Support. I can help with warranty, replacement status, product returns, and troubleshooting.")
@@ -790,6 +797,7 @@ export function ChatModal({
   }
 
   function handleWelcomeSelect(issue: string) {
+    resetAndSync()
     setShowWelcome(false)
 
     if (isLyzrConfigured) {
@@ -1109,7 +1117,7 @@ export function ChatModal({
               size="icon"
               className="h-7 w-7"
               title="Regenerate session ID"
-              onClick={onResetSession}
+              onClick={resetAndSync}
             >
               <Shuffle className="h-3.5 w-3.5" />
             </Button>
