@@ -16,6 +16,24 @@ interface LyzrRequest {
   imageBase64?: string;
 }
 
+function base64ToBlob(dataUrl: string): { blob: Blob; filename: string } {
+  const match = dataUrl.match(/^data:(image\/(\w+));base64,(.+)$/);
+  if (!match) {
+    throw new Error("Invalid data URL");
+  }
+  const mimeType = match[1];
+  const ext = match[2];
+  const raw = atob(match[3]);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) {
+    bytes[i] = raw.charCodeAt(i);
+  }
+  return {
+    blob: new Blob([bytes], { type: mimeType }),
+    filename: `upload.${ext}`,
+  };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -41,32 +59,50 @@ Deno.serve(async (req: Request) => {
     const effectiveSessionId =
       sessionId || `${agentId}-${crypto.randomUUID().slice(0, 12)}`;
 
-    const body: Record<string, unknown> = {
-      user_id: userId,
-      agent_id: agentId,
-      session_id: effectiveSessionId,
-      message: message,
-    };
-
-    if (imageBase64) {
-      body.file = imageBase64;
-    }
-
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000);
 
-    const lyzrResponse = await fetch(
-      "https://agent-prod.studio.lyzr.ai/v3/inference/chat/",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      }
-    );
+    let lyzrResponse: Response;
+
+    if (imageBase64) {
+      const { blob, filename } = base64ToBlob(imageBase64);
+      const form = new FormData();
+      form.append("user_id", userId);
+      form.append("agent_id", agentId);
+      form.append("session_id", effectiveSessionId);
+      form.append("message", message);
+      form.append("file", blob, filename);
+
+      lyzrResponse = await fetch(
+        "https://agent-prod.studio.lyzr.ai/v3/inference/chat/",
+        {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+          },
+          body: form,
+          signal: controller.signal,
+        }
+      );
+    } else {
+      lyzrResponse = await fetch(
+        "https://agent-prod.studio.lyzr.ai/v3/inference/chat/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            agent_id: agentId,
+            session_id: effectiveSessionId,
+            message,
+          }),
+          signal: controller.signal,
+        }
+      );
+    }
 
     clearTimeout(timeout);
 
