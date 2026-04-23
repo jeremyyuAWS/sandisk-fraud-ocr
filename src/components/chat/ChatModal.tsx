@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import type { ChatStep } from "@/data/app-state"
 import { scenarios, type Scenario } from "@/data/scenarios"
 import type { LyzrAgentConfig } from "@/data/lyzr-config"
@@ -435,7 +436,7 @@ export function ChatModal({
   onEscalate,
   onImageUploaded,
   lyzrConfig,
-  isLyzrConfigured,
+  isLyzrConfigured: isLyzrConfiguredProp,
 }: ChatModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [serialInput, setSerialInput] = useState("")
@@ -444,6 +445,9 @@ export function ChatModal({
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
+  const [useLive, setUseLive] = useState(false)
+
+  const isLyzrConfigured = useLive && isLyzrConfiguredProp
 
   // Return flow state
   const [returnEmail, setReturnEmail] = useState("")
@@ -835,27 +839,31 @@ export function ChatModal({
         <div className="flex items-center gap-2">
           <img src="/sandisk-logo.svg" alt="SanDisk" className="h-4" />
           <span className="text-sm font-bold tracking-wide text-foreground">CHAT</span>
-          {isLyzrConfigured && (
-            <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 gap-1">
-              <Bot className="h-3 w-3" />
-              Lyzr
-            </Badge>
-          )}
         </div>
-        <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-sandisk-red">
-            <Headset className="h-5 w-5" />
-          </Button>
+        <div className="flex items-center gap-1">
+          {isLyzrConfiguredProp && (
+            <label htmlFor="live-toggle" className="flex items-center gap-1.5 cursor-pointer select-none mr-1">
+              <span className={`text-[10px] font-semibold ${useLive ? "text-green-700" : "text-muted-foreground"}`}>
+                {useLive ? "Live" : "Simulated"}
+              </span>
+              <Switch
+                id="live-toggle"
+                checked={useLive}
+                onCheckedChange={setUseLive}
+                className="scale-75 origin-right"
+              />
+            </label>
+          )}
           {isExpanded && (
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsExpanded(false)}>
-              <Minimize2 className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsExpanded(false)}>
+              <Minimize2 className="h-3.5 w-3.5" />
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
-            <Minus className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+            <Minus className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
-            <X className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+            <X className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
