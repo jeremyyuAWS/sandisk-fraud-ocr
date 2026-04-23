@@ -467,22 +467,6 @@ export function ChatModal({
 
   const ws = useLyzrWebSocket()
 
-  const submitRef = useRef<() => void>(() => {})
-  submitRef.current = () => { if (!isSending) handleBottomSubmit() }
-
-  useEffect(() => {
-    const el = chatInputRef.current
-    if (!el) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault()
-        submitRef.current()
-      }
-    }
-    el.addEventListener("keydown", handler)
-    return () => el.removeEventListener("keydown", handler)
-  }, [open])
-
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -665,9 +649,16 @@ export function ChatModal({
     const msg = chatInputRef.current?.value?.trim() || freeInput.trim()
     if (!msg) return
     setFreeInput("")
-    if (chatInputRef.current) chatInputRef.current.value = ""
-    if (showWelcome) { startConversation(); return }
-    if (isLyzrConfigured) handleLyzrMessage(msg)
+    if (showWelcome) {
+      startConversation()
+      return
+    }
+    if (isLyzrConfigured) {
+      handleLyzrMessage(msg)
+      return
+    }
+    addMsg("user", msg)
+    addMsg("bot", "Thank you for your message. For this demo, please select one of the support options above or switch to Live mode to chat with the AI agent.")
   }
 
   // Warranty flow handlers
@@ -837,8 +828,7 @@ export function ChatModal({
     if (step === "return-order") { setReturnOrder(rawVal); handleReturnOrderSubmit(); return }
     if (step === "return-reason") { setReturnReason(rawVal); handleReturnReasonSubmit(); return }
     if (step === "serial-entry") { setSerialInput(rawVal); handleSerialSubmit(); return }
-    if (showWelcome) { handleBottomInputSubmit(); return }
-    if (isLyzrConfigured) { handleBottomInputSubmit(); return }
+    handleBottomInputSubmit()
   }
 
   const bottomPlaceholder =
