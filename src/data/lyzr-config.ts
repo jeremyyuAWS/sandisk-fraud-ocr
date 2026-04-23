@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 
 export interface LyzrAgentConfig {
@@ -53,6 +53,8 @@ function saveToDb(config: LyzrAgentConfig) {
 
 export function useLyzrConfig() {
   const [config, setConfigState] = useState<LyzrAgentConfig>(loadLocalConfig)
+  const configRef = useRef(config)
+  configRef.current = config
 
   useEffect(() => {
     supabase
@@ -82,14 +84,18 @@ export function useLyzrConfig() {
   }, [])
 
   const resetSession = useCallback(() => {
+    const newSessionId = generateSessionId(configRef.current.agentId)
     setConfigState((prev) => {
-      const next = { ...prev, sessionId: generateSessionId(prev.agentId) }
+      const next = { ...prev, sessionId: newSessionId }
       saveLocalConfig(next)
       return next
     })
+    return newSessionId
   }, [])
+
+  const getConfig = useCallback(() => configRef.current, [])
 
   const isConfigured = !!(config.enabled && config.apiKey && config.agentId && config.userId)
 
-  return { config, setConfig, isConfigured, resetSession }
+  return { config, configRef, setConfig, isConfigured, resetSession, getConfig }
 }

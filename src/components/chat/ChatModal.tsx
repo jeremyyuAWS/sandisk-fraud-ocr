@@ -645,6 +645,9 @@ export function ChatModal({
   const [returnImageUrl, setReturnImageUrl] = useState<string | null>(null)
   const [returnProgress, setReturnProgress] = useState(0)
 
+  const lyzrConfigRef = useRef(lyzrConfig)
+  lyzrConfigRef.current = lyzrConfig
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const returnFileRef = useRef<HTMLInputElement>(null)
@@ -780,7 +783,6 @@ export function ChatModal({
 
   // Welcome -> conversation
   function startConversation() {
-    onResetSession()
     setShowWelcome(false)
     if (!isLyzrConfigured) {
       addMsg("bot", "Hello! Welcome to SanDisk Support. I can help with warranty, replacement status, product returns, and troubleshooting.")
@@ -788,12 +790,11 @@ export function ChatModal({
   }
 
   function handleWelcomeSelect(issue: string) {
-    onResetSession()
     setShowWelcome(false)
 
     if (isLyzrConfigured) {
       setMessages([])
-      setTimeout(() => handleLyzrMessage(issue === "Return a Product" ? "need to return a product" : issue), 100)
+      handleLyzrMessage(issue === "Return a Product" ? "need to return a product" : issue)
       return
     }
 
@@ -828,19 +829,20 @@ export function ChatModal({
 
   // Lyzr
   async function handleLyzrMessage(userMessage: string) {
+    const cfg = lyzrConfigRef.current
     addMsg("user", userMessage)
     setIsSending(true)
-    ws.connect(lyzrConfig.sessionId, lyzrConfig.apiKey)
-    addLog("request", lyzrConfig.sessionId, {
-      agentId: lyzrConfig.agentId,
-      userId: lyzrConfig.userId,
-      sessionId: lyzrConfig.sessionId,
+    ws.connect(cfg.sessionId, cfg.apiKey)
+    addLog("request", cfg.sessionId, {
+      agentId: cfg.agentId,
+      userId: cfg.userId,
+      sessionId: cfg.sessionId,
       message: userMessage,
     })
     try {
-      const result = await sendToLyzr(lyzrConfig, userMessage)
+      const result = await sendToLyzr(cfg, userMessage)
       ws.disconnect()
-      addLog("response", lyzrConfig.sessionId, result as Record<string, unknown>)
+      addLog("response", cfg.sessionId, result as Record<string, unknown>)
       const responseText = result.response || result.error || "No response received."
       const parsed = tryParseLyzrResponse(responseText)
       if (parsed) {
@@ -855,7 +857,7 @@ export function ChatModal({
       }
     } catch (err) {
       ws.disconnect()
-      addLog("response", lyzrConfig.sessionId, { error: err instanceof Error ? err.message : "Network error" })
+      addLog("response", cfg.sessionId, { error: err instanceof Error ? err.message : "Network error" })
       addMsg("bot", "Failed to reach the Movate agent. Please check your settings.")
     } finally {
       setIsSending(false)
@@ -928,15 +930,16 @@ export function ChatModal({
   }
 
   async function handleRealFileUpload(file: File) {
+    const cfg = lyzrConfigRef.current
     const objectUrl = URL.createObjectURL(file)
     onImageUploaded?.(objectUrl)
     addComponent("user", <ImagePreview src={objectUrl} alt="Uploaded product" />)
     setIsSending(true)
-    ws.connect(lyzrConfig.sessionId, lyzrConfig.apiKey)
-    addLog("request", lyzrConfig.sessionId, {
-      agentId: lyzrConfig.agentId,
-      userId: lyzrConfig.userId,
-      sessionId: lyzrConfig.sessionId,
+    ws.connect(cfg.sessionId, cfg.apiKey)
+    addLog("request", cfg.sessionId, {
+      agentId: cfg.agentId,
+      userId: cfg.userId,
+      sessionId: cfg.sessionId,
       message: "Here is the product image for verification.",
       hasImage: true,
       fileName: file.name,
@@ -945,12 +948,12 @@ export function ChatModal({
     try {
       const base64 = await fileToBase64(file)
       const result = await sendToLyzr(
-        lyzrConfig,
+        cfg,
         "Here is the product image for verification.",
         base64
       )
       ws.disconnect()
-      addLog("response", lyzrConfig.sessionId, result as Record<string, unknown>)
+      addLog("response", cfg.sessionId, result as Record<string, unknown>)
       const responseText = result.response || result.error || "No response received."
       const parsed = tryParseLyzrResponse(responseText)
       if (parsed) {
@@ -965,7 +968,7 @@ export function ChatModal({
       }
     } catch (err) {
       ws.disconnect()
-      addLog("response", lyzrConfig.sessionId, { error: err instanceof Error ? err.message : "Network error" })
+      addLog("response", cfg.sessionId, { error: err instanceof Error ? err.message : "Network error" })
       addMsg("bot", "Failed to analyze the image. Please check your Movate agent settings.")
     } finally {
       setIsSending(false)
