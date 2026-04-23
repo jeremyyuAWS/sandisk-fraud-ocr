@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw, ScanSearch, Activity } from "lucide-react"
+import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw, ScanSearch, Activity, Shuffle } from "lucide-react"
 import { createLogEntry, type LogEntry } from "@/data/agent-logs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -1033,7 +1033,7 @@ export function ChatModal({
 
   const sizeClasses = isExpanded
     ? "fixed inset-4 z-50 w-auto h-auto"
-    : "fixed bottom-6 right-6 z-50 w-[480px] h-[700px]"
+    : "fixed bottom-6 right-6 z-50 w-[720px] h-[700px]"
 
   const showConversation = !showWelcome && messages.length > 0
 
@@ -1098,6 +1098,17 @@ export function ChatModal({
               variant="ghost"
               size="icon"
               className="h-7 w-7"
+              title="Regenerate session ID"
+              onClick={onResetSession}
+            >
+              <Shuffle className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {isLyzrConfigured && !showWelcome && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
               title="New session"
               onClick={handleNewSession}
             >
@@ -1117,6 +1128,14 @@ export function ChatModal({
           </Button>
         </div>
       </div>
+
+      {/* Session ID bar */}
+      {isLyzrConfigured && !showWelcome && (
+        <div className="flex items-center gap-1.5 px-3 py-1 border-b border-border bg-muted/30 shrink-0">
+          <span className="text-[10px] text-muted-foreground">Session:</span>
+          <code className="text-[10px] font-mono text-muted-foreground select-all truncate">{lyzrConfig.sessionId}</code>
+        </div>
+      )}
 
       {/* Welcome Screen */}
       {showWelcome && step === "welcome" && (
