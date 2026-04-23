@@ -10,6 +10,10 @@ import { Textarea } from "@/components/ui/textarea"
 import type { ChatStep } from "@/data/app-state"
 import { scenarios, type Scenario } from "@/data/scenarios"
 import type { LyzrAgentConfig } from "@/data/lyzr-config"
+import { MarkdownMessage } from "./MarkdownMessage"
+import { LyzrResponseCard, tryParseLyzrResponse } from "./LyzrResponseCard"
+import { AgentActivityFeed } from "./AgentActivityFeed"
+import { useLyzrWebSocket } from "@/hooks/useLyzrWebSocket"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,7 +112,7 @@ function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean 
               : "bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm"
           }`}
         >
-          {msg.text || msg.component}
+          {msg.component ? msg.component : msg.text ? <MarkdownMessage content={msg.text} /> : null}
         </div>
         {msg.timestamp && (
           <span className="text-[11px] text-muted-foreground ml-1">{msg.timestamp}</span>
@@ -461,6 +465,8 @@ export function ChatModal({
   const returnResultHandled = useRef(false)
   const scenario = scenarios[selectedScenario]
 
+  const ws = useLyzrWebSocket()
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -620,10 +626,19 @@ export function ChatModal({
   async function handleLyzrMessage(userMessage: string) {
     addMsg("user", userMessage)
     setIsSending(true)
+    ws.connect(lyzrConfig.sessionId, lyzrConfig.apiKey)
     try {
       const result = await sendToLyzr(lyzrConfig, userMessage)
-      addMsg("bot", result.response || result.error || "No response received.")
+      ws.disconnect()
+      const responseText = result.response || result.error || "No response received."
+      const parsed = tryParseLyzrResponse(responseText)
+      if (parsed) {
+        addComponent("bot", <LyzrResponseCard data={parsed} />)
+      } else {
+        addMsg("bot", responseText)
+      }
     } catch {
+      ws.disconnect()
       addMsg("bot", "Failed to reach the Lyzr agent. Please check your settings.")
     } finally {
       setIsSending(false)
@@ -689,6 +704,7 @@ export function ChatModal({
     onImageUploaded?.(objectUrl)
     addComponent("user", <ImagePreview src={objectUrl} alt="Uploaded product" />)
     setIsSending(true)
+    ws.connect(lyzrConfig.sessionId, lyzrConfig.apiKey)
     try {
       const base64 = await fileToBase64(file)
       const result = await sendToLyzr(
@@ -696,8 +712,16 @@ export function ChatModal({
         "Analyze this SanDisk product image for OCR fraud verification. Extract brand, product name, serial number, capacity. Return a JSON object with fields: brandDetected, productText, serialDetected, capacityDetected, imageQuality, riskScore (0-100), riskLevel (Low/Medium/High), and reasonCodes (array of strings).",
         base64
       )
-      addMsg("bot", result.response || result.error || "No response received.")
+      ws.disconnect()
+      const responseText = result.response || result.error || "No response received."
+      const parsed = tryParseLyzrResponse(responseText)
+      if (parsed) {
+        addComponent("bot", <LyzrResponseCard data={parsed} />)
+      } else {
+        addMsg("bot", responseText)
+      }
     } catch {
+      ws.disconnect()
       addMsg("bot", "Failed to analyze the image. Please check your Lyzr agent settings.")
     } finally {
       setIsSending(false)
@@ -856,9 +880,8 @@ export function ChatModal({
           {isSending && (
             <div className="flex items-start gap-2">
               <BotAvatar />
-              <div className="bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm flex items-center gap-2">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Thinking...
+              <div className="bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm">
+                <AgentActivityFeed events={ws.events} isConnected={ws.isConnected} />
               </div>
             </div>
           )}

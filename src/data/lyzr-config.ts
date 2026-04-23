@@ -11,11 +11,11 @@ export interface LyzrAgentConfig {
 const STORAGE_KEY = "sandisk-lyzr-config"
 
 const defaultConfig: LyzrAgentConfig = {
-  enabled: false,
-  apiKey: "",
-  agentId: "",
-  userId: "",
-  sessionId: "",
+  enabled: true,
+  apiKey: "sk-default-D0plT8nq8DdRpw5LR956a7J4Df7Yo2QC",
+  agentId: "69ea29fa48859962fb807a69",
+  userId: "jeremy.yu@movate.com",
+  sessionId: "69ea29fa48859962fb807a69-lc18hxoveym",
 }
 
 function loadConfig(): LyzrAgentConfig {

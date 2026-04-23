@@ -129,7 +129,7 @@ function LyzrSettingsPanel({
           <Label htmlFor="lyzr-agent-id" className="text-xs">Agent ID</Label>
           <Input
             id="lyzr-agent-id"
-            placeholder="69e953b3376cfbc273dbb016"
+            placeholder="69ea29fa48859962fb807a69"
             value={config.agentId}
             onChange={(e) => onChange({ agentId: e.target.value })}
             className="h-7 text-xs font-mono"
@@ -139,7 +139,7 @@ function LyzrSettingsPanel({
           <Label htmlFor="lyzr-user-id" className="text-xs">User ID</Label>
           <Input
             id="lyzr-user-id"
-            placeholder="user@example.com"
+            placeholder="jeremy.yu@movate.com"
             value={config.userId}
             onChange={(e) => onChange({ userId: e.target.value })}
             className="h-7 text-xs"

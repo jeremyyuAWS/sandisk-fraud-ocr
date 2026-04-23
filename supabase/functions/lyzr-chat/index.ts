@@ -52,6 +52,9 @@ Deno.serve(async (req: Request) => {
       body.file = imageBase64;
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
+
     const lyzrResponse = await fetch(
       "https://agent-prod.studio.lyzr.ai/v3/inference/chat/",
       {
@@ -61,8 +64,11 @@ Deno.serve(async (req: Request) => {
           "x-api-key": apiKey,
         },
         body: JSON.stringify(body),
+        signal: controller.signal,
       }
     );
+
+    clearTimeout(timeout);
 
     const data = await lyzrResponse.json();
 
