@@ -8,7 +8,6 @@ import { ScenarioSwitcherPanel } from "@/components/support/ScenarioSwitcher"
 import { LogsViewer } from "@/components/logs/LogsViewer"
 import { useLyzrConfig } from "@/data/lyzr-config"
 import { type LogEntry, type WsEventRow, persistLog, loadLogs, deleteLogsBySession, deleteAllLogs, persistWsEvent, loadWsEvents, deleteWsEventsBySession } from "@/data/agent-logs"
-import { WelcomeModal } from "@/components/support/WelcomeModal"
 import type { AppView, ChatStep } from "@/data/app-state"
 
 export default function App() {
@@ -96,7 +95,6 @@ export default function App() {
 
   return (
     <>
-      <WelcomeModal />
       <Toaster position="bottom-left" />
       {currentView === "support" ? (
         <>
