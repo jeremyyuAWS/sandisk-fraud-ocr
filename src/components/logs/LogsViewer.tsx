@@ -87,6 +87,62 @@ export function LogsViewer({ open, logs, onClose, onClear }: LogsViewerProps) {
     navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
   }
 
+  function renderJsonValue(value: unknown, indent: number): React.ReactNode[] {
+    const pad = "  ".repeat(indent)
+    const nodes: React.ReactNode[] = []
+
+    if (value === null) {
+      nodes.push(<span className="text-orange-600">null</span>)
+    } else if (typeof value === "boolean") {
+      nodes.push(<span className="text-orange-600">{String(value)}</span>)
+    } else if (typeof value === "number") {
+      nodes.push(<span className="text-blue-600">{String(value)}</span>)
+    } else if (typeof value === "string") {
+      const truncated = value.length > 300 ? value.slice(0, 300) + "..." : value
+      nodes.push(<span className="text-green-700">"{truncated}"</span>)
+    } else if (Array.isArray(value)) {
+      if (value.length === 0) {
+        nodes.push(<span className="text-foreground/70">{"[]"}</span>)
+      } else {
+        nodes.push(<span className="text-foreground/70">{"[\n"}</span>)
+        value.forEach((item, i) => {
+          nodes.push(<span>{pad}{"  "}</span>)
+          nodes.push(...renderJsonValue(item, indent + 1))
+          if (i < value.length - 1) nodes.push(<span className="text-foreground/70">,</span>)
+          nodes.push(<span>{"\n"}</span>)
+        })
+        nodes.push(<span>{pad}</span>)
+        nodes.push(<span className="text-foreground/70">{"]"}</span>)
+      }
+    } else if (typeof value === "object") {
+      const entries = Object.entries(value as Record<string, unknown>)
+      if (entries.length === 0) {
+        nodes.push(<span className="text-foreground/70">{"{}"}</span>)
+      } else {
+        nodes.push(<span className="text-foreground/70">{"{\n"}</span>)
+        entries.forEach(([k, v], i) => {
+          nodes.push(<span>{pad}{"  "}</span>)
+          nodes.push(<span className="text-red-600">"{k}"</span>)
+          nodes.push(<span className="text-foreground/70">: </span>)
+          nodes.push(...renderJsonValue(v, indent + 1))
+          if (i < entries.length - 1) nodes.push(<span className="text-foreground/70">,</span>)
+          nodes.push(<span>{"\n"}</span>)
+        })
+        nodes.push(<span>{pad}</span>)
+        nodes.push(<span className="text-foreground/70">{"}"}</span>)
+      }
+    }
+    return nodes
+  }
+
+  function SyntaxJson({ data }: { data: Record<string, unknown> }) {
+    return (
+      <pre className="px-4 py-3 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed max-h-96 overflow-y-auto">
+        {renderJsonValue(data, 0)}
+      </pre>
+    )
+  }
+
   if (!open) return null
 
   return (
@@ -236,8 +292,8 @@ export function LogsViewer({ open, logs, onClose, onClear }: LogsViewerProps) {
                     >
                       {log.direction}
                     </Badge>
-                    <span className="font-mono text-xs text-muted-foreground truncate flex-1">
-                      session: {log.sessionId}
+                    <span className="text-xs text-muted-foreground truncate flex-1">
+                      {Object.keys(log.data).length} fields
                     </span>
                     {isExpanded ? (
                       <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -246,20 +302,38 @@ export function LogsViewer({ open, logs, onClose, onClear }: LogsViewerProps) {
                     )}
                   </button>
                   {isExpanded && (
-                    <div className="border-t border-border bg-muted/20">
-                      <div className="flex justify-end px-4 pt-2">
+                    <div className="border-t border-border">
+                      {/* Session ID bar */}
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/40 border-b border-border">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Session</span>
+                        <code className="text-xs font-mono font-semibold text-foreground bg-background px-2.5 py-1 rounded-md border border-border select-all">
+                          {log.sessionId}
+                        </code>
                         <button
                           type="button"
-                          onClick={() => copyLog(log)}
-                          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          onClick={() => {
+                            navigator.clipboard.writeText(log.sessionId)
+                          }}
+                          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                         >
-                          {copiedId === log.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                          {copiedId === log.id ? "Copied" : "Copy JSON"}
+                          <Copy className="h-3 w-3" />
                         </button>
                       </div>
-                      <pre className="px-4 py-3 overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed max-h-96 overflow-y-auto">
-                        {JSON.stringify(log.data, null, 2)}
-                      </pre>
+                      {/* Payload */}
+                      <div className="bg-muted/10">
+                        <div className="flex items-center justify-between px-4 pt-2">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Payload</span>
+                          <button
+                            type="button"
+                            onClick={() => copyLog(log)}
+                            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          >
+                            {copiedId === log.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            {copiedId === log.id ? "Copied" : "Copy JSON"}
+                          </button>
+                        </div>
+                        <SyntaxJson data={log.data} />
+                      </div>
                     </div>
                   )}
                 </div>
