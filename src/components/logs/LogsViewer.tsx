@@ -10,9 +10,10 @@ interface LogsViewerProps {
   logs: LogEntry[]
   onClose: () => void
   onClear: () => void
+  onDeleteSession: (sessionId: string) => void
 }
 
-export function LogsViewer({ open, logs, onClose, onClear }: LogsViewerProps) {
+export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: LogsViewerProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [sessionFilter, setSessionFilter] = useState<string | null>(null)
   const [directionFilter, setDirectionFilter] = useState<"all" | "request" | "response">("all")
@@ -197,16 +198,28 @@ export function LogsViewer({ open, logs, onClose, onClear }: LogsViewerProps) {
             All
           </button>
           {Array.from(uniqueSessions.entries()).map(([sid, count]) => (
-            <button
-              key={sid}
-              type="button"
-              onClick={() => setSessionFilter(sessionFilter === sid ? null : sid)}
-              className={`text-xs px-2 py-1 rounded-md font-mono transition-colors cursor-pointer ${
-                sessionFilter === sid ? "bg-foreground text-background font-semibold" : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              ...{sid.slice(-8)} ({count})
-            </button>
+            <span key={sid} className="inline-flex items-center rounded-md overflow-hidden border border-border">
+              <button
+                type="button"
+                onClick={() => setSessionFilter(sessionFilter === sid ? null : sid)}
+                className={`text-xs px-2 py-1 font-mono transition-colors cursor-pointer ${
+                  sessionFilter === sid ? "bg-foreground text-background font-semibold" : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                ...{sid.slice(-8)} ({count})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (sessionFilter === sid) setSessionFilter(null)
+                  onDeleteSession(sid)
+                }}
+                className="px-1.5 py-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer border-l border-border"
+                title="Delete this session's logs"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </span>
           ))}
         </div>
 
@@ -317,6 +330,14 @@ export function LogsViewer({ open, logs, onClose, onClear }: LogsViewerProps) {
                           className="text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                         >
                           <Copy className="h-3 w-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDeleteSession(log.sessionId)}
+                          className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Delete Session
                         </button>
                       </div>
                       {/* Payload */}

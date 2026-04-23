@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Toaster } from "@/components/ui/sonner"
 import { SupportPage } from "@/components/support/SupportPage"
 import { AgentWorkspace } from "@/components/agent/AgentWorkspace"
@@ -7,7 +7,7 @@ import { ChatModal } from "@/components/chat/ChatModal"
 import { ScenarioSwitcherPanel } from "@/components/support/ScenarioSwitcher"
 import { LogsViewer } from "@/components/logs/LogsViewer"
 import { useLyzrConfig } from "@/data/lyzr-config"
-import type { LogEntry } from "@/data/agent-logs"
+import { type LogEntry, persistLog, loadLogs, deleteLogsBySession, deleteAllLogs } from "@/data/agent-logs"
 import { WelcomeModal } from "@/components/support/WelcomeModal"
 import type { AppView, ChatStep } from "@/data/app-state"
 
@@ -22,12 +22,23 @@ export default function App() {
   const [agentLogs, setAgentLogs] = useState<LogEntry[]>([])
   const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured, resetSession: resetLyzrSession } = useLyzrConfig()
 
+  useEffect(() => {
+    loadLogs().then(setAgentLogs)
+  }, [])
+
   const addLog = useCallback((log: LogEntry) => {
     setAgentLogs((prev) => [...prev, log])
+    persistLog(log)
   }, [])
 
   const clearLogs = useCallback(() => {
     setAgentLogs([])
+    deleteAllLogs()
+  }, [])
+
+  const deleteSession = useCallback((sessionId: string) => {
+    setAgentLogs((prev) => prev.filter((l) => l.sessionId !== sessionId))
+    deleteLogsBySession(sessionId)
   }, [])
 
   const openChat = useCallback(() => {
@@ -105,6 +116,7 @@ export default function App() {
         logs={agentLogs}
         onClose={() => setLogsOpen(false)}
         onClear={clearLogs}
+        onDeleteSession={deleteSession}
       />
     </>
   )
