@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw } from "lucide-react"
+import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw, ScanSearch } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -409,6 +409,129 @@ function JsonResponseCard({ data }: { data: Record<string, unknown> }) {
   )
 }
 
+function formatAnalysisKey(key: string): string {
+  return key
+    .replace(/[_-]/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function ImageAnalysisCard({ data }: { data: Record<string, unknown> }) {
+  const entries = Object.entries(data).filter(([, v]) => v != null && v !== "")
+
+  const riskLevel = (data.riskLevel || data.risk_level || data.riskAssessment) as string | undefined
+  const riskScore = (data.riskScore || data.risk_score || data.fraudScore || data.fraud_score) as number | undefined
+  const riskColor = riskLevel
+    ? riskLevel.toString().toLowerCase().includes("low")
+      ? "bg-green-50 text-green-700 border-green-200"
+      : riskLevel.toString().toLowerCase().includes("high")
+        ? "bg-red-50 text-red-700 border-red-200"
+        : "bg-amber-50 text-amber-700 border-amber-200"
+    : null
+
+  const regularEntries = entries.filter(([k]) =>
+    !["riskLevel", "risk_level", "riskScore", "risk_score", "riskAssessment", "fraudScore", "fraud_score", "reasonCodes", "reason_codes", "flags", "findings"].includes(k)
+  )
+  const listField = (data.reasonCodes || data.reason_codes || data.flags || data.findings) as string[] | undefined
+
+  return (
+    <Card className="border border-border">
+      <CardContent className="p-3 space-y-3 text-xs">
+        <div className="flex items-center gap-2">
+          <ScanSearch className="h-4 w-4 text-muted-foreground" />
+          <span className="font-semibold text-sm">Image Analysis Result</span>
+        </div>
+        <Separator />
+        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+          {regularEntries.map(([key, val]) => {
+            if (typeof val === "object") return null
+            return (
+              <div key={key} className="contents">
+                <span className="text-muted-foreground">{formatAnalysisKey(key)}</span>
+                <span className={key.toLowerCase().includes("serial") ? "font-mono" : ""}>{String(val)}</span>
+              </div>
+            )
+          })}
+        </div>
+        {(riskLevel || riskScore != null) && (
+          <>
+            <Separator />
+            <div className="flex items-center gap-2">
+              {riskColor && (
+                <Badge variant="outline" className={`text-[10px] ${riskColor}`}>
+                  {String(riskLevel)} Risk
+                </Badge>
+              )}
+              {riskScore != null && (
+                <div className="flex items-center gap-1.5">
+                  <Progress value={Number(riskScore)} className="w-16 h-2" />
+                  <span className="font-semibold">{riskScore}/100</span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+        {listField && Array.isArray(listField) && listField.length > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-1">
+              <div className="text-muted-foreground font-medium">Findings</div>
+              {listField.map((item, i) => {
+                const isGood = String(item).toUpperCase().includes("SUCCESS") || String(item).toUpperCase().includes("VALID")
+                return (
+                  <div key={i} className="flex items-center gap-1.5">
+                    {isGood
+                      ? <CircleCheck className="h-3 w-3 text-green-600 shrink-0" />
+                      : <TriangleAlert className="h-3 w-3 text-amber-500 shrink-0" />}
+                    <span>{String(item)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ImageAnalysisTextCard({ text }: { text: string }) {
+  const lines = text.split("\n").filter(Boolean)
+  const hasStructure = lines.length > 1
+
+  if (!hasStructure) {
+    return (
+      <Card className="border border-border">
+        <CardContent className="p-3 space-y-2 text-xs">
+          <div className="flex items-center gap-2">
+            <ScanSearch className="h-4 w-4 text-muted-foreground" />
+            <span className="font-semibold text-sm">Image Analysis Result</span>
+          </div>
+          <Separator />
+          <div className="text-sm leading-relaxed">
+            <MarkdownMessage content={text} />
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="border border-border">
+      <CardContent className="p-3 space-y-2 text-xs">
+        <div className="flex items-center gap-2">
+          <ScanSearch className="h-4 w-4 text-muted-foreground" />
+          <span className="font-semibold text-sm">Image Analysis Result</span>
+        </div>
+        <Separator />
+        <div className="text-sm leading-relaxed space-y-1">
+          <MarkdownMessage content={text} />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Return fraud scenario engine
 // ---------------------------------------------------------------------------
@@ -780,6 +903,7 @@ export function ChatModal({
     const objectUrl = URL.createObjectURL(file)
     onImageUploaded?.(objectUrl)
     addComponent("user", <ImagePreview src={objectUrl} alt="Uploaded product" />)
+    addMsg("bot", "Image received. Analyzing your product now...")
     setIsSending(true)
     ws.connect(lyzrConfig.sessionId, lyzrConfig.apiKey)
     try {
@@ -797,9 +921,9 @@ export function ChatModal({
       } else {
         const jsonObj = tryExtractJson(responseText)
         if (jsonObj) {
-          addComponent("bot", <JsonResponseCard data={jsonObj} />)
+          addComponent("bot", <ImageAnalysisCard data={jsonObj} />)
         } else {
-          addMsg("bot", responseText)
+          addComponent("bot", <ImageAnalysisTextCard text={responseText} />)
         }
       }
     } catch {
