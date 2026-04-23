@@ -460,11 +460,28 @@ export function ChatModal({
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const returnFileRef = useRef<HTMLInputElement>(null)
+  const chatInputRef = useRef<HTMLInputElement>(null)
   const ocrResultHandled = useRef(false)
   const returnResultHandled = useRef(false)
   const scenario = scenarios[selectedScenario]
 
   const ws = useLyzrWebSocket()
+
+  const submitRef = useRef<() => void>(() => {})
+  submitRef.current = () => { if (!isSending) handleBottomSubmit() }
+
+  useEffect(() => {
+    const el = chatInputRef.current
+    if (!el) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault()
+        submitRef.current()
+      }
+    }
+    el.addEventListener("keydown", handler)
+    return () => el.removeEventListener("keydown", handler)
+  }, [open])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -645,9 +662,10 @@ export function ChatModal({
   }
 
   function handleBottomInputSubmit() {
-    const msg = freeInput.trim()
+    const msg = chatInputRef.current?.value?.trim() || freeInput.trim()
     if (!msg) return
     setFreeInput("")
+    if (chatInputRef.current) chatInputRef.current.value = ""
     if (showWelcome) { startConversation(); return }
     if (isLyzrConfigured) handleLyzrMessage(msg)
   }
@@ -814,11 +832,12 @@ export function ChatModal({
   }
 
   function handleBottomSubmit() {
+    const rawVal = chatInputRef.current?.value ?? ""
+    if (step === "return-email") { setReturnEmail(rawVal); handleReturnEmailSubmit(); return }
+    if (step === "return-order") { setReturnOrder(rawVal); handleReturnOrderSubmit(); return }
+    if (step === "return-reason") { setReturnReason(rawVal); handleReturnReasonSubmit(); return }
+    if (step === "serial-entry") { setSerialInput(rawVal); handleSerialSubmit(); return }
     if (showWelcome) { handleBottomInputSubmit(); return }
-    if (step === "return-email") { handleReturnEmailSubmit(); return }
-    if (step === "return-order") { handleReturnOrderSubmit(); return }
-    if (step === "return-reason") { handleReturnReasonSubmit(); return }
-    if (step === "serial-entry") { handleSerialSubmit(); return }
     if (isLyzrConfigured) { handleBottomInputSubmit(); return }
   }
 
@@ -1041,10 +1060,7 @@ export function ChatModal({
 
       {/* Bottom bar */}
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
-      <form
-        onSubmit={(e) => { e.preventDefault(); if (!isSending) handleBottomSubmit() }}
-        className="mt-auto border-t border-border px-4 py-3 flex items-center gap-3 shrink-0"
-      >
+      <div className="mt-auto border-t border-border px-4 py-3 flex items-center gap-3 shrink-0">
         <button
           type="button"
           className="shrink-0 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -1054,21 +1070,38 @@ export function ChatModal({
         >
           {isLyzrConfigured ? <ImageIcon className="h-5 w-5" /> : <Paperclip className="h-5 w-5" />}
         </button>
-        <Input
+        <input
+          ref={chatInputRef}
+          type="text"
           placeholder={bottomPlaceholder}
-          className="text-sm h-9 border-0 shadow-none focus-visible:ring-0 px-0 bg-transparent"
+          className="flex-1 text-sm h-9 border-0 shadow-none outline-none bg-transparent placeholder:text-muted-foreground"
           value={bottomValue}
           onChange={(e) => handleBottomChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !isSending) {
+              e.preventDefault()
+              e.stopPropagation()
+              handleBottomSubmit()
+            }
+          }}
           disabled={isSending}
         />
         <button
-          type="submit"
+          type="button"
           className="shrink-0 text-foreground hover:text-sandisk-red transition-colors cursor-pointer disabled:opacity-40"
           disabled={isSending}
+          onMouseDown={(e) => {
+            e.preventDefault()
+            if (!isSending) handleBottomSubmit()
+          }}
+          onClick={(e) => {
+            e.preventDefault()
+            if (!isSending) handleBottomSubmit()
+          }}
         >
           <ArrowRight className="h-5 w-5" />
         </button>
-      </form>
+      </div>
     </div>
   )
 }
