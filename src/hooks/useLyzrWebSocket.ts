@@ -47,6 +47,7 @@ export function useLyzrWebSocket() {
           text = String(e.data)
         }
         if (!text || text === "ping") return
+        if (text.toLowerCase().includes("in_progress")) return
 
         setEvents((prev) => {
           const updated = prev.map((ev) =>

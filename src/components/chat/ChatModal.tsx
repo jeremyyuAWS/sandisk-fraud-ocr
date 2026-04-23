@@ -381,6 +381,34 @@ function ImagePreview({ src, alt }: { src: string; alt: string }) {
   )
 }
 
+function tryExtractJson(text: string): Record<string, unknown> | null {
+  try {
+    const obj = JSON.parse(text)
+    if (obj && typeof obj === "object") return obj
+  } catch { /* ignore */ }
+  const match = text.match(/\{[\s\S]*\}/)
+  if (match) {
+    try {
+      const obj = JSON.parse(match[0])
+      if (obj && typeof obj === "object") return obj
+    } catch { /* ignore */ }
+  }
+  return null
+}
+
+function JsonResponseCard({ data }: { data: Record<string, unknown> }) {
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+      <div className="px-3 py-1.5 border-b border-border bg-muted/50">
+        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Agent Response</span>
+      </div>
+      <pre className="px-3 py-2 text-xs font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap break-words">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Return fraud scenario engine
 // ---------------------------------------------------------------------------
@@ -671,7 +699,12 @@ export function ChatModal({
       if (parsed) {
         addComponent("bot", <LyzrResponseCard data={parsed} />)
       } else {
-        addMsg("bot", responseText)
+        const jsonObj = tryExtractJson(responseText)
+        if (jsonObj) {
+          addComponent("bot", <JsonResponseCard data={jsonObj} />)
+        } else {
+          addMsg("bot", responseText)
+        }
       }
     } catch {
       ws.disconnect()
@@ -762,7 +795,12 @@ export function ChatModal({
       if (parsed) {
         addComponent("bot", <LyzrResponseCard data={parsed} />)
       } else {
-        addMsg("bot", responseText)
+        const jsonObj = tryExtractJson(responseText)
+        if (jsonObj) {
+          addComponent("bot", <JsonResponseCard data={jsonObj} />)
+        } else {
+          addMsg("bot", responseText)
+        }
       }
     } catch {
       ws.disconnect()
