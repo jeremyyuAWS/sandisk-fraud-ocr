@@ -16,7 +16,7 @@ export default function App() {
   const [selectedScenario, setSelectedScenario] = useState("suspicious")
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured } = useLyzrConfig()
+  const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured, resetSession: resetLyzrSession } = useLyzrConfig()
 
   const openChat = useCallback(() => {
     setChatOpen(true)
@@ -75,6 +75,7 @@ export default function App() {
             onImageUploaded={setUploadedImageUrl}
             lyzrConfig={lyzrConfig}
             isLyzrConfigured={isLyzrConfigured}
+            onResetSession={resetLyzrSession}
           />
         </>
       ) : (

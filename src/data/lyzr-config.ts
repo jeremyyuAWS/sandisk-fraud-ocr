@@ -52,7 +52,15 @@ export function useLyzrConfig() {
     })
   }, [])
 
+  const resetSession = useCallback(() => {
+    setConfigState((prev) => {
+      const next = { ...prev, sessionId: generateSessionId(prev.agentId) }
+      saveConfig(next)
+      return next
+    })
+  }, [])
+
   const isConfigured = !!(config.enabled && config.apiKey && config.agentId && config.userId)
 
-  return { config, setConfig, isConfigured }
+  return { config, setConfig, isConfigured, resetSession }
 }

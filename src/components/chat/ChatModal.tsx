@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert } from "lucide-react"
+import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -7,7 +7,6 @@ import { Progress } from "@/components/ui/progress"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import { Switch } from "@/components/ui/switch"
 import type { ChatStep } from "@/data/app-state"
 import { scenarios, type Scenario } from "@/data/scenarios"
 import type { LyzrAgentConfig } from "@/data/lyzr-config"
@@ -37,6 +36,7 @@ interface ChatModalProps {
   onImageUploaded?: (url: string) => void
   lyzrConfig: LyzrAgentConfig
   isLyzrConfigured: boolean
+  onResetSession: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -296,14 +296,40 @@ function ReturnFraudCard({ result }: { result: ReturnFraudResult }) {
 // Welcome screen
 // ---------------------------------------------------------------------------
 
-function WelcomeScreen({ onSelect: _ }: { onSelect: (issue: string) => void }) {
+function WelcomeScreen({
+  useLive,
+  onToggleMode,
+  showModeToggle,
+}: {
+  useLive: boolean
+  onToggleMode: (live: boolean) => void
+  showModeToggle: boolean
+}) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-8">
+    <div className="flex-1 flex flex-col items-center justify-center px-8 gap-4">
       <img
         src="/sandisk-chat-image.png"
         alt="Welcome, We're here to help"
         className="w-72 h-auto"
       />
+      {showModeToggle && (
+        <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-4 py-2.5">
+          <button
+            type="button"
+            onClick={() => onToggleMode(false)}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${!useLive ? "bg-background text-foreground shadow-sm border border-border" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Simulated
+          </button>
+          <button
+            type="button"
+            onClick={() => onToggleMode(true)}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${useLive ? "bg-green-600 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            Live Agent
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -437,6 +463,7 @@ export function ChatModal({
   onImageUploaded,
   lyzrConfig,
   isLyzrConfigured: isLyzrConfiguredProp,
+  onResetSession,
 }: ChatModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [serialInput, setSerialInput] = useState("")
@@ -577,6 +604,15 @@ export function ChatModal({
 
   function addComponent(from: "bot" | "user", component: React.ReactNode) {
     setMessages((prev) => [...prev, { from, component, timestamp: now() }])
+  }
+
+  function handleNewSession() {
+    onResetSession()
+    setMessages([])
+    setShowWelcome(true)
+    setFreeInput("")
+    setIsSending(false)
+    onStepChange("welcome")
   }
 
   // Welcome -> conversation
@@ -848,18 +884,21 @@ export function ChatModal({
           <span className="text-xs font-bold tracking-wide text-foreground shrink-0">CHAT</span>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          {isLyzrConfiguredProp && (
-            <label htmlFor="live-toggle" className="flex items-center gap-1 cursor-pointer select-none mr-0.5">
-              <span className={`text-[10px] font-semibold whitespace-nowrap ${useLive ? "text-green-700" : "text-muted-foreground"}`}>
-                {useLive ? "Live" : "Sim"}
-              </span>
-              <Switch
-                id="live-toggle"
-                checked={useLive}
-                onCheckedChange={setUseLive}
-                className="scale-[0.65] origin-right"
-              />
-            </label>
+          {isLyzrConfiguredProp && !showWelcome && (
+            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded mr-0.5 ${useLive ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+              {useLive ? "Live" : "Sim"}
+            </span>
+          )}
+          {isLyzrConfigured && !showWelcome && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title="New session"
+              onClick={handleNewSession}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </Button>
           )}
           {isExpanded && (
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsExpanded(false)}>
@@ -877,7 +916,11 @@ export function ChatModal({
 
       {/* Welcome Screen */}
       {showWelcome && step === "welcome" && (
-        <WelcomeScreen onSelect={handleWelcomeSelect} />
+        <WelcomeScreen
+          useLive={useLive}
+          onToggleMode={setUseLive}
+          showModeToggle={isLyzrConfiguredProp}
+        />
       )}
 
       {/* Conversation Messages */}
