@@ -1,9 +1,18 @@
 import { useState, useRef, useEffect, useMemo } from "react"
-import { X, Search, Copy, Check, ChevronDown, ChevronUp, ScrollText, Trash2, ListFilter as Filter } from "lucide-react"
+import { X, Search, Copy, Check, ChevronDown, ChevronUp, ScrollText, Trash2, ListFilter as Filter, ArrowUpRight, ArrowDownLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import type { LogEntry } from "@/data/agent-logs"
+
+interface SessionGroup {
+  sessionId: string
+  logs: LogEntry[]
+  firstTimestamp: string
+  lastTimestamp: string
+  requestCount: number
+  responseCount: number
+}
 
 interface LogsViewerProps {
   open: boolean
@@ -17,8 +26,10 @@ export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: Lo
   const [searchQuery, setSearchQuery] = useState("")
   const [sessionFilter, setSessionFilter] = useState<string | null>(null)
   const [directionFilter, setDirectionFilter] = useState<"all" | "request" | "response">("all")
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [copiedSession, setCopiedSession] = useState<string | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -55,7 +66,37 @@ export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: Lo
     })
   }, [logs, sessionFilter, directionFilter, searchQuery])
 
-  function toggleExpand(id: number) {
+  const sessionGroups = useMemo(() => {
+    const map = new Map<string, LogEntry[]>()
+    for (const log of filteredLogs) {
+      const arr = map.get(log.sessionId)
+      if (arr) arr.push(log)
+      else map.set(log.sessionId, [log])
+    }
+    const groups: SessionGroup[] = []
+    for (const [sessionId, sessionLogs] of map) {
+      groups.push({
+        sessionId,
+        logs: sessionLogs,
+        firstTimestamp: sessionLogs[0].timestamp,
+        lastTimestamp: sessionLogs[sessionLogs.length - 1].timestamp,
+        requestCount: sessionLogs.filter((l) => l.direction === "request").length,
+        responseCount: sessionLogs.filter((l) => l.direction === "response").length,
+      })
+    }
+    return groups
+  }, [filteredLogs])
+
+  function toggleSession(sid: string) {
+    setExpandedSessions((prev) => {
+      const next = new Set(prev)
+      if (next.has(sid)) next.delete(sid)
+      else next.add(sid)
+      return next
+    })
+  }
+
+  function togglePayload(id: number) {
     setExpandedIds((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -65,10 +106,12 @@ export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: Lo
   }
 
   function expandAll() {
+    setExpandedSessions(new Set(sessionGroups.map((g) => g.sessionId)))
     setExpandedIds(new Set(filteredLogs.map((l) => l.id)))
   }
 
   function collapseAll() {
+    setExpandedSessions(new Set())
     setExpandedIds(new Set())
   }
 
@@ -78,12 +121,20 @@ export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: Lo
     setTimeout(() => setCopiedId(null), 1500)
   }
 
+  function copySessionId(sid: string) {
+    navigator.clipboard.writeText(sid)
+    setCopiedSession(sid)
+    setTimeout(() => setCopiedSession(null), 1500)
+  }
+
   function copyAllFiltered() {
-    const payload = filteredLogs.map((l) => ({
-      timestamp: l.timestamp,
-      direction: l.direction,
-      sessionId: l.sessionId,
-      data: l.data,
+    const payload = sessionGroups.map((g) => ({
+      sessionId: g.sessionId,
+      entries: g.logs.map((l) => ({
+        timestamp: l.timestamp,
+        direction: l.direction,
+        data: l.data,
+      })),
     }))
     navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
   }
@@ -154,13 +205,16 @@ export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: Lo
           <ScrollText className="h-5 w-5 text-foreground" />
           <h1 className="text-lg font-semibold tracking-tight">Agent Interaction Logs</h1>
           <Badge variant="outline" className="text-xs">
-            {filteredLogs.length} of {logs.length}
+            {sessionGroups.length} {sessionGroups.length === 1 ? "session" : "sessions"}
+          </Badge>
+          <Badge variant="outline" className="text-xs">
+            {filteredLogs.length} {filteredLogs.length === 1 ? "entry" : "entries"}
           </Badge>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={copyAllFiltered} disabled={filteredLogs.length === 0}>
             <Copy className="h-3.5 w-3.5 mr-1.5" />
-            Export Filtered
+            Export
           </Button>
           <Button variant="outline" size="sm" onClick={onClear} disabled={logs.length === 0}>
             <Trash2 className="h-3.5 w-3.5 mr-1.5" />
@@ -185,7 +239,7 @@ export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: Lo
         </div>
 
         {/* Session filter */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <Filter className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-xs text-muted-foreground font-medium">Session:</span>
           <button
@@ -253,9 +307,9 @@ export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: Lo
         </div>
       </div>
 
-      {/* Logs list */}
+      {/* Session groups */}
       <div className="flex-1 overflow-y-auto">
-        {filteredLogs.length === 0 ? (
+        {sessionGroups.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
             <ScrollText className="h-12 w-12" />
             {logs.length === 0 ? (
@@ -282,78 +336,133 @@ export function LogsViewer({ open, logs, onClose, onClear, onDeleteSession }: Lo
             )}
           </div>
         ) : (
-          <div className="max-w-5xl mx-auto px-6 py-4 space-y-2">
-            {filteredLogs.map((log) => {
-              const isExpanded = expandedIds.has(log.id)
-              const isReq = log.direction === "request"
+          <div className="max-w-5xl mx-auto px-6 py-4 space-y-4">
+            {sessionGroups.map((group) => {
+              const isSessionOpen = expandedSessions.has(group.sessionId)
               return (
-                <div key={log.id} className="rounded-lg border border-border bg-card text-sm">
+                <div key={group.sessionId} className="rounded-xl border border-border bg-card overflow-hidden">
+                  {/* Session header */}
                   <button
                     type="button"
-                    onClick={() => toggleExpand(log.id)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => toggleSession(group.sessionId)}
+                    className="w-full flex items-center gap-3 px-5 py-3.5 text-left cursor-pointer hover:bg-muted/50 transition-colors"
                   >
-                    <span className={`shrink-0 w-2 h-2 rounded-full ${isReq ? "bg-blue-500" : "bg-green-500"}`} />
-                    <span className="font-mono text-xs text-muted-foreground shrink-0 w-24">{log.timestamp}</span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] uppercase font-semibold shrink-0 ${
-                        isReq
-                          ? "bg-blue-50 text-blue-700 border-blue-200"
-                          : "bg-green-50 text-green-700 border-green-200"
-                      }`}
-                    >
-                      {log.direction}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground truncate flex-1">
-                      {Object.keys(log.data).length} fields
-                    </span>
-                    {isExpanded ? (
+                    {isSessionOpen ? (
                       <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
                     ) : (
                       <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                     )}
-                  </button>
-                  {isExpanded && (
-                    <div className="border-t border-border">
-                      {/* Session ID bar */}
-                      <div className="flex items-center gap-3 px-4 py-2.5 bg-muted/40 border-b border-border">
+                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
                         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Session</span>
-                        <code className="text-xs font-mono font-semibold text-foreground bg-background px-2.5 py-1 rounded-md border border-border select-all">
-                          {log.sessionId}
+                        <code className="text-xs font-mono font-semibold text-foreground truncate">
+                          {group.sessionId}
+                        </code>
+                      </div>
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                        <span>{group.firstTimestamp} &ndash; {group.lastTimestamp}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 border-blue-200">
+                        <ArrowUpRight className="h-2.5 w-2.5 mr-0.5" />
+                        {group.requestCount} req
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">
+                        <ArrowDownLeft className="h-2.5 w-2.5 mr-0.5" />
+                        {group.responseCount} res
+                      </Badge>
+                    </div>
+                  </button>
+
+                  {/* Session body */}
+                  {isSessionOpen && (
+                    <div className="border-t border-border">
+                      {/* Session action bar */}
+                      <div className="flex items-center gap-2 px-5 py-2 bg-muted/30 border-b border-border">
+                        <code className="text-[11px] font-mono text-muted-foreground select-all flex-1 truncate">
+                          {group.sessionId}
                         </code>
                         <button
                           type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(log.sessionId)
-                          }}
-                          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                          onClick={() => copySessionId(group.sessionId)}
+                          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                         >
-                          <Copy className="h-3 w-3" />
+                          {copiedSession === group.sessionId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          {copiedSession === group.sessionId ? "Copied" : "Copy ID"}
                         </button>
+                        <span className="w-px h-4 bg-border" />
                         <button
                           type="button"
-                          onClick={() => onDeleteSession(log.sessionId)}
-                          className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                          onClick={() => onDeleteSession(group.sessionId)}
+                          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
                         >
                           <Trash2 className="h-3 w-3" />
                           Delete Session
                         </button>
                       </div>
-                      {/* Payload */}
-                      <div className="bg-muted/10">
-                        <div className="flex items-center justify-between px-4 pt-2">
-                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Payload</span>
-                          <button
-                            type="button"
-                            onClick={() => copyLog(log)}
-                            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                          >
-                            {copiedId === log.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                            {copiedId === log.id ? "Copied" : "Copy JSON"}
-                          </button>
-                        </div>
-                        <SyntaxJson data={log.data} />
+
+                      {/* Conversation entries */}
+                      <div className="divide-y divide-border">
+                        {group.logs.map((log, idx) => {
+                          const isReq = log.direction === "request"
+                          const isPayloadOpen = expandedIds.has(log.id)
+                          return (
+                            <div key={log.id} className="group">
+                              {/* Entry row */}
+                              <button
+                                type="button"
+                                onClick={() => togglePayload(log.id)}
+                                className="w-full flex items-center gap-3 px-5 py-2.5 text-left cursor-pointer hover:bg-muted/30 transition-colors"
+                              >
+                                {/* Turn number */}
+                                <span className="text-[10px] font-mono text-muted-foreground w-5 text-right shrink-0">
+                                  #{idx + 1}
+                                </span>
+                                <span className={`shrink-0 w-2 h-2 rounded-full ${isReq ? "bg-blue-500" : "bg-green-500"}`} />
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] uppercase font-semibold shrink-0 ${
+                                    isReq
+                                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                                      : "bg-green-50 text-green-700 border-green-200"
+                                  }`}
+                                >
+                                  {log.direction}
+                                </Badge>
+                                <span className="font-mono text-xs text-muted-foreground shrink-0">{log.timestamp}</span>
+                                <span className="text-xs text-muted-foreground truncate flex-1">
+                                  {Object.keys(log.data).length} fields
+                                </span>
+                                {isPayloadOpen ? (
+                                  <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                ) : (
+                                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                )}
+                              </button>
+
+                              {/* Payload */}
+                              {isPayloadOpen && (
+                                <div className="bg-muted/10 border-t border-border/50">
+                                  <div className="flex items-center justify-between px-5 pt-2">
+                                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Payload</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => copyLog(log)}
+                                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                    >
+                                      {copiedId === log.id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                                      {copiedId === log.id ? "Copied" : "Copy JSON"}
+                                    </button>
+                                  </div>
+                                  <div className="px-1">
+                                    <SyntaxJson data={log.data} />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
                   )}
