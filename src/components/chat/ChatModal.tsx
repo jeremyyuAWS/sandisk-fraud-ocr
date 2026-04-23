@@ -786,7 +786,7 @@ export function ChatModal({
       const base64 = await fileToBase64(file)
       const result = await sendToLyzr(
         lyzrConfig,
-        "Analyze this SanDisk product image for OCR fraud verification. Extract brand, product name, serial number, capacity. Return a JSON object with fields: brandDetected, productText, serialDetected, capacityDetected, imageQuality, riskScore (0-100), riskLevel (Low/Medium/High), and reasonCodes (array of strings).",
+        "Here is the product image for verification.",
         base64
       )
       ws.disconnect()
