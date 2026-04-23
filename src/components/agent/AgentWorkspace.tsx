@@ -10,6 +10,7 @@ import { toast } from "sonner"
 
 interface AgentWorkspaceProps {
   selectedScenario: string
+  uploadedImageUrl?: string | null
   onBack: () => void
 }
 
@@ -119,7 +120,7 @@ function TranscriptPanel({ scenario }: { scenario: Scenario }) {
   )
 }
 
-function ImagePanel() {
+function ImagePanel({ imageUrl }: { imageUrl?: string | null }) {
   return (
     <Card className="border border-border">
       <CardHeader className="pb-2 pt-4 px-4">
@@ -129,12 +130,20 @@ function ImagePanel() {
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-4">
-        <div className="bg-secondary rounded-lg h-32 flex items-center justify-center">
-          <div className="text-center text-xs text-muted-foreground">
-            <FileImage className="h-10 w-10 mx-auto mb-2 opacity-40" />
-            product_label_front.jpg
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt="Uploaded product"
+            className="w-full h-auto max-h-48 object-contain rounded-lg bg-secondary"
+          />
+        ) : (
+          <div className="bg-secondary rounded-lg h-32 flex items-center justify-center">
+            <div className="text-center text-xs text-muted-foreground">
+              <FileImage className="h-10 w-10 mx-auto mb-2 opacity-40" />
+              product_label_front.jpg
+            </div>
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   )
@@ -257,7 +266,7 @@ function RiskPanel({ scenario }: { scenario: Scenario }) {
   )
 }
 
-export function AgentWorkspace({ selectedScenario, onBack }: AgentWorkspaceProps) {
+export function AgentWorkspace({ selectedScenario, uploadedImageUrl, onBack }: AgentWorkspaceProps) {
   const scenario = scenarios[selectedScenario]
 
   return (
@@ -295,7 +304,7 @@ export function AgentWorkspace({ selectedScenario, onBack }: AgentWorkspaceProps
         </div>
         <div className="space-y-4">
           <TranscriptPanel scenario={scenario} />
-          <ImagePanel />
+          <ImagePanel imageUrl={uploadedImageUrl || scenario.productImage} />
         </div>
         <div className="space-y-4">
           <OcrPanel scenario={scenario} />

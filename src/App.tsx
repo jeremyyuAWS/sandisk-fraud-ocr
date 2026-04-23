@@ -13,6 +13,7 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
   const [chatStep, setChatStep] = useState<ChatStep>("closed")
   const [selectedScenario, setSelectedScenario] = useState("suspicious")
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured } = useLyzrConfig()
 
   const openChat = useCallback(() => {
@@ -62,6 +63,7 @@ export default function App() {
             onClose={closeChat}
             onStepChange={setChatStep}
             onEscalate={handleEscalate}
+            onImageUploaded={setUploadedImageUrl}
             lyzrConfig={lyzrConfig}
             isLyzrConfigured={isLyzrConfigured}
           />
@@ -69,6 +71,7 @@ export default function App() {
       ) : (
         <AgentWorkspace
           selectedScenario={selectedScenario}
+          uploadedImageUrl={uploadedImageUrl}
           onBack={handleBackToSupport}
         />
       )}

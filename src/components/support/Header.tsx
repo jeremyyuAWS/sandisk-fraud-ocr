@@ -43,12 +43,7 @@ export function Header() {
       </div>
       <div className="bg-background border-b border-border px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-10">
-          <div className="flex items-center gap-1">
-            <span className="text-xl font-black tracking-tighter text-foreground">
-              SANDISK
-            </span>
-            <span className="text-sandisk-red text-xl font-black">.</span>
-          </div>
+          <img src="/sandisk-logo.svg" alt="SanDisk" className="h-5" />
           <nav className="hidden lg:flex items-center gap-6">
             {navItems.map((item) => (
               <button

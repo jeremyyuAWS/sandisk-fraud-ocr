@@ -13,6 +13,7 @@ interface LyzrRequest {
   userId: string;
   sessionId: string;
   message: string;
+  imageBase64?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -24,7 +25,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { apiKey, agentId, userId, sessionId, message }: LyzrRequest =
+    const { apiKey, agentId, userId, sessionId, message, imageBase64 }: LyzrRequest =
       await req.json();
 
     if (!apiKey || !agentId || !userId) {
@@ -40,6 +41,17 @@ Deno.serve(async (req: Request) => {
     const effectiveSessionId =
       sessionId || `${agentId}-${crypto.randomUUID().slice(0, 12)}`;
 
+    const body: Record<string, unknown> = {
+      user_id: userId,
+      agent_id: agentId,
+      session_id: effectiveSessionId,
+      message: message,
+    };
+
+    if (imageBase64) {
+      body.file = imageBase64;
+    }
+
     const lyzrResponse = await fetch(
       "https://agent-prod.studio.lyzr.ai/v3/inference/chat/",
       {
@@ -48,12 +60,7 @@ Deno.serve(async (req: Request) => {
           "Content-Type": "application/json",
           "x-api-key": apiKey,
         },
-        body: JSON.stringify({
-          user_id: userId,
-          agent_id: agentId,
-          session_id: effectiveSessionId,
-          message: message,
-        }),
+        body: JSON.stringify(body),
       }
     );
 

@@ -1,16 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import {
-  X,
-  Minus,
-  Bell,
-  Paperclip,
-  ArrowRight,
-  Upload,
-  Loader as Loader2,
-  Maximize2,
-  Minimize2,
-  Bot,
-} from "lucide-react"
+import { X, Minus, Bell, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -34,6 +23,7 @@ interface ChatModalProps {
   onClose: () => void
   onStepChange: (step: ChatStep) => void
   onEscalate: () => void
+  onImageUploaded?: (url: string) => void
   lyzrConfig: LyzrAgentConfig
   isLyzrConfigured: boolean
 }
@@ -139,7 +129,8 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 async function sendToLyzr(
   config: LyzrAgentConfig,
-  message: string
+  message: string,
+  imageBase64?: string
 ): Promise<{ response?: string; error?: string; session_id?: string }> {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/lyzr-chat`, {
     method: "POST",
@@ -153,9 +144,27 @@ async function sendToLyzr(
       userId: config.userId,
       sessionId: config.sessionId,
       message,
+      ...(imageBase64 ? { imageBase64 } : {}),
     }),
   })
   return res.json()
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+function ImagePreview({ src, alt }: { src: string; alt: string }) {
+  return (
+    <div className="rounded-lg overflow-hidden border border-border">
+      <img src={src} alt={alt} className="w-full h-auto max-h-40 object-cover" />
+    </div>
+  )
 }
 
 export function ChatModal({
@@ -165,6 +174,7 @@ export function ChatModal({
   onClose,
   onStepChange,
   onEscalate,
+  onImageUploaded,
   lyzrConfig,
   isLyzrConfigured,
 }: ChatModalProps) {
@@ -175,6 +185,7 @@ export function ChatModal({
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const ocrResultHandled = useRef(false)
   const scenario = scenarios[selectedScenario]
 
@@ -313,16 +324,42 @@ export function ChatModal({
     onStepChange("image-request")
   }
 
-  function handleImageUpload() {
-    if (isLyzrConfigured) {
-      handleLyzrMessage("[Product image uploaded]")
-      return
-    }
+  function handleDemoImageUpload() {
+    onImageUploaded?.(scenario.productImage)
     addMessages([
-      { from: "user", text: "[Product image uploaded]" },
+      { from: "user", component: <ImagePreview src={scenario.productImage} alt="Product upload" /> },
       { from: "bot", text: "Thank you. Analyzing your product image now..." },
     ])
     onStepChange("ocr-processing")
+  }
+
+  async function handleRealFileUpload(file: File) {
+    const objectUrl = URL.createObjectURL(file)
+    onImageUploaded?.(objectUrl)
+    addMessages([
+      { from: "user", component: <ImagePreview src={objectUrl} alt="Uploaded product" /> },
+    ])
+    setIsSending(true)
+    try {
+      const base64 = await fileToBase64(file)
+      const result = await sendToLyzr(
+        lyzrConfig,
+        "Analyze this SanDisk product image for OCR fraud verification. Extract brand, product name, serial number, capacity. Return a JSON object with fields: brandDetected, productText, serialDetected, capacityDetected, imageQuality, riskScore (0-100), riskLevel (Low/Medium/High), and reasonCodes (array of strings).",
+        base64
+      )
+      const botText = result.response || result.error || "No response received."
+      addMessages([{ from: "bot", text: botText }])
+    } catch {
+      addMessages([{ from: "bot", text: "Failed to analyze the image. Please check your Lyzr agent settings." }])
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) handleRealFileUpload(file)
+    e.target.value = ""
   }
 
   if (!open) return null
@@ -340,8 +377,7 @@ export function ChatModal({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-background shrink-0">
         <div className="flex items-center gap-2">
-          <span className="text-base font-black tracking-tighter text-foreground">SANDISK</span>
-          <span className="text-sandisk-red text-base font-black">.</span>
+          <img src="/sandisk-logo.svg" alt="SanDisk" className="h-3.5" />
           <span className="text-sm font-semibold text-foreground">CHAT</span>
           {isLyzrConfigured && (
             <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 gap-1">
@@ -441,14 +477,20 @@ export function ChatModal({
         )}
 
         {!isLyzrConfigured && step === "image-request" && (
-          <div className="pt-2">
+          <div className="pt-2 space-y-2">
+            <div className="rounded-lg overflow-hidden border border-border">
+              <img
+                src={scenario.productImage}
+                alt="Product to upload"
+                className="w-full h-auto max-h-36 object-cover"
+              />
+            </div>
             <button
-              onClick={handleImageUpload}
-              className="w-full border-2 border-dashed border-border rounded-lg p-6 flex flex-col items-center gap-2 hover:border-sandisk-red hover:bg-secondary/50 transition-colors cursor-pointer"
+              onClick={handleDemoImageUpload}
+              className="w-full border-2 border-dashed border-border rounded-lg p-4 flex flex-col items-center gap-1.5 hover:border-sandisk-red hover:bg-secondary/50 transition-colors cursor-pointer"
             >
-              <Upload className="h-8 w-8 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Click to upload product image</span>
-              <span className="text-xs text-muted-foreground">Front of product, label clearly visible</span>
+              <Upload className="h-6 w-6 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Click to upload this product image</span>
             </button>
           </div>
         )}
@@ -509,9 +551,26 @@ export function ChatModal({
       </div>
 
       {/* Bottom bar */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
       <div className="border-t border-border px-3 py-2.5 flex items-center gap-2 shrink-0">
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-          <Paperclip className="h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={() => {
+            if (isLyzrConfigured) {
+              fileInputRef.current?.click()
+            }
+          }}
+          title={isLyzrConfigured ? "Upload product image" : "Upload not available in demo mode"}
+        >
+          {isLyzrConfigured ? <ImageIcon className="h-4 w-4" /> : <Paperclip className="h-4 w-4" />}
         </Button>
         {canSendFreeText ? (
           <Input

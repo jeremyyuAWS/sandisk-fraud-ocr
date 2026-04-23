@@ -26,6 +26,7 @@ export interface Scenario {
   id: string
   label: string
   serialEntered: string
+  productImage: string
   warranty: WarrantyInfo
   ocr: OcrResult
   risk: RiskAssessment
@@ -37,6 +38,7 @@ export const scenarios: Record<string, Scenario> = {
     id: "genuine",
     label: "Genuine Product",
     serialEntered: "SDKX-256-88421",
+    productImage: "/sandisk-xtreme-x2.jpeg",
     warranty: {
       product: "SanDisk Extreme Pro microSDXC 256GB",
       serialNumber: "SDKX-256-88421",
@@ -64,6 +66,7 @@ export const scenarios: Record<string, Scenario> = {
     id: "suspicious",
     label: "Suspicious / Fraudulent",
     serialEntered: "SDKX-256-99182",
+    productImage: "/sandisk-ssd.jpeg",
     warranty: {
       product: "SanDisk Extreme Pro microSDXC 256GB",
       serialNumber: "SDKX-256-99182",
@@ -95,6 +98,7 @@ export const scenarios: Record<string, Scenario> = {
     id: "unverifiable",
     label: "Unverifiable Image",
     serialEntered: "SDKX-256-44710",
+    productImage: "/sandisk-xtreme-hand.jpg",
     warranty: {
       product: "SanDisk Extreme Pro microSDXC 256GB",
       serialNumber: "SDKX-256-44710",
