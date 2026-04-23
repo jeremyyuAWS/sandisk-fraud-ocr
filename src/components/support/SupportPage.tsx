@@ -13,10 +13,16 @@ const supportTopics = [
   { title: "Contact Us", desc: "Reach our support team directly" },
 ]
 
-export function SupportPage() {
+interface SupportPageProps {
+  settingsPanel?: React.ReactNode
+  settingsOpen?: boolean
+  onSettingsToggle?: () => void
+}
+
+export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle }: SupportPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header settingsPanel={settingsPanel} settingsOpen={settingsOpen} onSettingsToggle={onSettingsToggle} />
       <HeroBanner />
       <SupportCategories />
       <section className="py-12 px-8 max-w-5xl mx-auto">

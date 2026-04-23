@@ -833,22 +833,22 @@ export function ChatModal({
       className={`${sizeClasses} bg-background border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${!open ? "hidden" : ""}`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background shrink-0">
-        <div className="flex items-center gap-2">
-          <img src="/sandisk-logo.svg" alt="SanDisk" className="h-4" />
-          <span className="text-sm font-bold tracking-wide text-foreground">CHAT</span>
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border bg-background shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <img src="/sandisk-logo.svg" alt="SanDisk" className="h-3.5 shrink-0" />
+          <span className="text-xs font-bold tracking-wide text-foreground shrink-0">CHAT</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 shrink-0">
           {isLyzrConfiguredProp && (
-            <label htmlFor="live-toggle" className="flex items-center gap-1.5 cursor-pointer select-none mr-1">
-              <span className={`text-[10px] font-semibold ${useLive ? "text-green-700" : "text-muted-foreground"}`}>
-                {useLive ? "Live" : "Simulated"}
+            <label htmlFor="live-toggle" className="flex items-center gap-1 cursor-pointer select-none mr-0.5">
+              <span className={`text-[10px] font-semibold whitespace-nowrap ${useLive ? "text-green-700" : "text-muted-foreground"}`}>
+                {useLive ? "Live" : "Sim"}
               </span>
               <Switch
                 id="live-toggle"
                 checked={useLive}
                 onCheckedChange={setUseLive}
-                className="scale-75 origin-right"
+                className="scale-[0.65] origin-right"
               />
             </label>
           )}

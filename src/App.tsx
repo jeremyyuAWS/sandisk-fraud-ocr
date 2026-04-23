@@ -4,7 +4,7 @@ import { SupportPage } from "@/components/support/SupportPage"
 import { AgentWorkspace } from "@/components/agent/AgentWorkspace"
 import { ChatLauncher } from "@/components/chat/ChatLauncher"
 import { ChatModal } from "@/components/chat/ChatModal"
-import { ScenarioSwitcher } from "@/components/support/ScenarioSwitcher"
+import { ScenarioSwitcherPanel } from "@/components/support/ScenarioSwitcher"
 import { useLyzrConfig } from "@/data/lyzr-config"
 import { WelcomeModal } from "@/components/support/WelcomeModal"
 import type { AppView, ChatStep } from "@/data/app-state"
@@ -15,6 +15,7 @@ export default function App() {
   const [chatStep, setChatStep] = useState<ChatStep>("closed")
   const [selectedScenario, setSelectedScenario] = useState("suspicious")
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured } = useLyzrConfig()
 
   const openChat = useCallback(() => {
@@ -42,19 +43,27 @@ export default function App() {
     setChatStep("welcome")
   }, [])
 
+  const settingsPanel = (
+    <ScenarioSwitcherPanel
+      selected={selectedScenario}
+      onSelect={handleScenarioChange}
+      lyzrConfig={lyzrConfig}
+      onLyzrConfigChange={setLyzrConfig}
+      onClose={() => setSettingsOpen(false)}
+    />
+  )
+
   return (
     <>
       <WelcomeModal />
       <Toaster position="bottom-left" />
-      <ScenarioSwitcher
-        selected={selectedScenario}
-        onSelect={handleScenarioChange}
-        lyzrConfig={lyzrConfig}
-        onLyzrConfigChange={setLyzrConfig}
-      />
       {currentView === "support" ? (
         <>
-          <SupportPage />
+          <SupportPage
+            settingsPanel={settingsPanel}
+            settingsOpen={settingsOpen}
+            onSettingsToggle={() => setSettingsOpen((v) => !v)}
+          />
           {!chatOpen && <ChatLauncher onClick={openChat} />}
           <ChatModal
             open={chatOpen}

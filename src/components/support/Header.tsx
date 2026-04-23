@@ -1,4 +1,4 @@
-import { Search, ShoppingCart, User } from "lucide-react"
+import { Search, ShoppingCart, User, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
@@ -12,7 +12,13 @@ const navItems = [
   "Support",
 ]
 
-export function Header() {
+interface HeaderProps {
+  settingsPanel?: React.ReactNode
+  settingsOpen?: boolean
+  onSettingsToggle?: () => void
+}
+
+export function Header({ settingsPanel, settingsOpen, onSettingsToggle }: HeaderProps) {
   return (
     <header className="w-full">
       <div className="bg-foreground text-primary-foreground px-6 py-1.5 text-xs flex items-center justify-between">
@@ -81,6 +87,16 @@ export function Header() {
           >
             <Search className="h-5 w-5" />
           </Button>
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onSettingsToggle}
+            >
+              <Settings className="h-5 w-5" />
+            </Button>
+            {settingsOpen && settingsPanel}
+          </div>
         </div>
       </div>
     </header>

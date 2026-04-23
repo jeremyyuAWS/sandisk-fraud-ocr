@@ -1,4 +1,4 @@
-import { Settings, Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,74 +20,59 @@ interface ScenarioSwitcherProps {
   onSelect: (id: string) => void
   lyzrConfig: LyzrAgentConfig
   onLyzrConfigChange: (updates: Partial<LyzrAgentConfig>) => void
+  onClose: () => void
 }
 
-export function ScenarioSwitcher({ selected, onSelect, lyzrConfig, onLyzrConfigChange }: ScenarioSwitcherProps) {
-  const [expanded, setExpanded] = useState(false)
-
+export function ScenarioSwitcherPanel({ selected, onSelect, lyzrConfig, onLyzrConfigChange, onClose }: ScenarioSwitcherProps) {
   return (
-    <div className="fixed top-20 left-4 z-[60]">
-      {!expanded ? (
+    <div className="absolute right-0 top-full mt-2 bg-background border border-border rounded-lg shadow-lg min-w-[300px] z-[60]">
+      <div className="flex items-center justify-between px-3 pt-3 pb-1">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          Demo Controls
+        </span>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="bg-background shadow-md border-border"
-          onClick={() => setExpanded(true)}
+          className="h-6 w-6 p-0"
+          onClick={onClose}
         >
-          <Settings className="h-3.5 w-3.5 mr-1.5" />
-          Demo
+          x
         </Button>
-      ) : (
-        <div className="bg-background border border-border rounded-lg shadow-lg min-w-[300px]">
-          <div className="flex items-center justify-between px-3 pt-3 pb-1">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Demo Controls
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 w-6 p-0"
-              onClick={() => setExpanded(false)}
-            >
-              x
-            </Button>
+      </div>
+      <Tabs defaultValue="scenarios" className="px-3 pb-3">
+        <TabsList className="w-full">
+          <TabsTrigger value="scenarios" className="flex-1 text-xs">Scenarios</TabsTrigger>
+          <TabsTrigger value="settings" className="flex-1 text-xs">Lyzr Agents</TabsTrigger>
+        </TabsList>
+        <TabsContent value="scenarios" className="mt-2">
+          <div className="space-y-1.5">
+            {scenarioOptions.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => {
+                  onSelect(opt.id)
+                  onClose()
+                }}
+                className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                  selected === opt.id
+                    ? "bg-secondary font-medium"
+                    : "hover:bg-secondary/50"
+                }`}
+              >
+                {opt.label}
+                {selected === opt.id && (
+                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${opt.color}`}>
+                    Active
+                  </Badge>
+                )}
+              </button>
+            ))}
           </div>
-          <Tabs defaultValue="scenarios" className="px-3 pb-3">
-            <TabsList className="w-full">
-              <TabsTrigger value="scenarios" className="flex-1 text-xs">Scenarios</TabsTrigger>
-              <TabsTrigger value="settings" className="flex-1 text-xs">Lyzr Agents</TabsTrigger>
-            </TabsList>
-            <TabsContent value="scenarios" className="mt-2">
-              <div className="space-y-1.5">
-                {scenarioOptions.map((opt) => (
-                  <button
-                    key={opt.id}
-                    onClick={() => {
-                      onSelect(opt.id)
-                      setExpanded(false)
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                      selected === opt.id
-                        ? "bg-secondary font-medium"
-                        : "hover:bg-secondary/50"
-                    }`}
-                  >
-                    {opt.label}
-                    {selected === opt.id && (
-                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${opt.color}`}>
-                        Active
-                      </Badge>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </TabsContent>
-            <TabsContent value="settings" className="mt-2">
-              <LyzrSettingsPanel config={lyzrConfig} onChange={onLyzrConfigChange} />
-            </TabsContent>
-          </Tabs>
-        </div>
-      )}
+        </TabsContent>
+        <TabsContent value="settings" className="mt-2">
+          <LyzrSettingsPanel config={lyzrConfig} onChange={onLyzrConfigChange} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
