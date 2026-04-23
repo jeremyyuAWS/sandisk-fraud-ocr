@@ -42,7 +42,7 @@ export function ScenarioSwitcherPanel({ selected, onSelect, lyzrConfig, onLyzrCo
       <Tabs defaultValue="scenarios" className="px-3 pb-3">
         <TabsList className="w-full">
           <TabsTrigger value="scenarios" className="flex-1 text-xs">Scenarios</TabsTrigger>
-          <TabsTrigger value="settings" className="flex-1 text-xs">Lyzr Agents</TabsTrigger>
+          <TabsTrigger value="settings" className="flex-1 text-xs">Movate Agents</TabsTrigger>
         </TabsList>
         <TabsContent value="scenarios" className="mt-2">
           <div className="space-y-1.5">
@@ -90,8 +90,8 @@ function LyzrSettingsPanel({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium">Enable Lyzr Agent</p>
-          <p className="text-[10px] text-muted-foreground">Power chat with a live Lyzr AI agent</p>
+          <p className="text-xs font-medium">Enable Movate Agent</p>
+          <p className="text-[10px] text-muted-foreground">Power chat with a live Movate AI agent</p>
         </div>
         <Switch
           checked={config.enabled}

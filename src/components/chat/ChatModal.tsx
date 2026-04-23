@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw, ScanSearch } from "lucide-react"
+import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw, ScanSearch, Activity } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -624,6 +624,7 @@ export function ChatModal({
   const [isSending, setIsSending] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
   const [useLive, setUseLive] = useState(false)
+  const [showWsActivity, setShowWsActivity] = useState(true)
 
   const isLyzrConfigured = useLive && isLyzrConfiguredProp
 
@@ -831,7 +832,7 @@ export function ChatModal({
       }
     } catch {
       ws.disconnect()
-      addMsg("bot", "Failed to reach the Lyzr agent. Please check your settings.")
+      addMsg("bot", "Failed to reach the Movate agent. Please check your settings.")
     } finally {
       setIsSending(false)
     }
@@ -928,7 +929,7 @@ export function ChatModal({
       }
     } catch {
       ws.disconnect()
-      addMsg("bot", "Failed to analyze the image. Please check your Lyzr agent settings.")
+      addMsg("bot", "Failed to analyze the image. Please check your Movate agent settings.")
     } finally {
       setIsSending(false)
     }
@@ -1056,6 +1057,17 @@ export function ChatModal({
               variant="ghost"
               size="icon"
               className="h-7 w-7"
+              title={showWsActivity ? "Hide agent activity" : "Show agent activity"}
+              onClick={() => setShowWsActivity((v) => !v)}
+            >
+              <Activity className={`h-3.5 w-3.5 ${showWsActivity ? "text-green-600" : "text-muted-foreground"}`} />
+            </Button>
+          )}
+          {isLyzrConfigured && !showWelcome && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
               title="New session"
               onClick={handleNewSession}
             >
@@ -1096,7 +1108,14 @@ export function ChatModal({
             <div className="flex items-start gap-2">
               <BotAvatar />
               <div className="bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm">
-                <AgentActivityFeed events={ws.events} isConnected={ws.isConnected} />
+                {showWsActivity ? (
+                  <AgentActivityFeed events={ws.events} isConnected={ws.isConnected} />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Thinking...</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
