@@ -1041,8 +1041,12 @@ export function ChatModal({
 
       {/* Bottom bar */}
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
-      <div className="mt-auto border-t border-border px-4 py-3 flex items-center gap-3 shrink-0">
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (!isSending) handleBottomSubmit() }}
+        className="mt-auto border-t border-border px-4 py-3 flex items-center gap-3 shrink-0"
+      >
         <button
+          type="button"
           className="shrink-0 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           onClick={() => {
             if (isLyzrConfigured) fileInputRef.current?.click()
@@ -1055,19 +1059,16 @@ export function ChatModal({
           className="text-sm h-9 border-0 shadow-none focus-visible:ring-0 px-0 bg-transparent"
           value={bottomValue}
           onChange={(e) => handleBottomChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !isSending) handleBottomSubmit()
-          }}
           disabled={isSending}
         />
         <button
+          type="submit"
           className="shrink-0 text-foreground hover:text-sandisk-red transition-colors cursor-pointer disabled:opacity-40"
           disabled={isSending}
-          onClick={() => { if (!isSending) handleBottomSubmit() }}
         >
           <ArrowRight className="h-5 w-5" />
         </button>
-      </div>
+      </form>
     </div>
   )
 }
