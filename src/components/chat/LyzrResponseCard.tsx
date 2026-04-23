@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
-import { CircleCheck, TriangleAlert, Eye, Package, ShieldCheck, ListChecks } from "lucide-react"
+import { CircleCheck, TriangleAlert, Eye, Package, ShieldCheck, ListChecks, ScanSearch } from "lucide-react"
 
 interface VisualAttributes {
   color?: string
@@ -39,24 +39,38 @@ interface ReturnRequestAnalysis {
   recommended_action?: RecommendedAction
 }
 
+interface OcrVerification {
+  brandDetected?: string
+  productText?: string
+  serialDetected?: string
+  capacityDetected?: string
+  imageQuality?: string
+  riskScore?: number
+  riskLevel?: string
+  reasonCodes?: string[]
+  [key: string]: unknown
+}
+
 export interface LyzrResponseData {
   return_request_analysis?: ReturnRequestAnalysis
+  ocr_verification?: OcrVerification
   [key: string]: unknown
 }
 
 export function tryParseLyzrResponse(text: string): LyzrResponseData | null {
+  function check(obj: unknown): LyzrResponseData | null {
+    if (!obj || typeof obj !== "object") return null
+    const o = obj as Record<string, unknown>
+    if (o.return_request_analysis) return o as LyzrResponseData
+    if (o.brandDetected || o.riskScore !== undefined || o.riskLevel) return { ocr_verification: o } as LyzrResponseData
+    return null
+  }
   try {
-    const parsed = JSON.parse(text)
-    if (parsed?.return_request_analysis) return parsed
+    return check(JSON.parse(text))
   } catch {
-    const jsonMatch = text.match(/\{[\s\S]*"return_request_analysis"[\s\S]*\}/)
+    const jsonMatch = text.match(/\{[\s\S]*?\}(?:\s*$)/) || text.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0])
-        if (parsed?.return_request_analysis) return parsed
-      } catch {
-        // not valid JSON
-      }
+      try { return check(JSON.parse(jsonMatch[0])) } catch { /* not valid JSON */ }
     }
   }
   return null
@@ -86,7 +100,101 @@ function LabelRow({ label, value }: { label: string; value: string | undefined }
   )
 }
 
+function reasonCodeLabel(code: string): string {
+  const map: Record<string, string> = {
+    OCRMATCHBRAND_SUCCESS: "Brand verified successfully",
+    OCRMATCHCAPACITY_SUCCESS: "Capacity matches product records",
+    VALIDSERIALFORMAT: "Serial number format is valid",
+    OCRMATCHBRAND_FAIL: "Brand could not be verified",
+    OCRMATCHCAPACITY_FAIL: "Capacity mismatch detected",
+    INVALIDSERIALFORMAT: "Serial number format is invalid",
+    SERIAL_MISMATCH: "Serial number does not match records",
+    IMAGE_QUALITY_LOW: "Image quality is too low",
+    SUSPICIOUS_PATTERN: "Suspicious pattern detected",
+  }
+  return map[code] || code.replace(/_/g, " ").replace(/([A-Z])/g, " $1").trim()
+}
+
+function OcrVerificationCard({ ocr }: { ocr: OcrVerification }) {
+  const riskScore = ocr.riskScore ?? 0
+  const riskLevel = ocr.riskLevel ?? "Unknown"
+  const isLow = riskLevel.toLowerCase() === "low"
+  const isHigh = riskLevel.toLowerCase() === "high"
+
+  return (
+    <Card className="border border-border">
+      <CardContent className="p-3 space-y-3 text-xs">
+        <div className="flex items-center gap-2">
+          <ScanSearch className="h-4 w-4 text-muted-foreground" />
+          <span className="font-semibold text-sm">OCR Verification Result</span>
+        </div>
+        <Separator />
+        <div>
+          <div className="text-muted-foreground mb-1.5 font-medium">Extracted Product Details</div>
+          <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+            <LabelRow label="Brand" value={ocr.brandDetected} />
+            <LabelRow label="Product" value={ocr.productText} />
+            <LabelRow label="Capacity" value={ocr.capacityDetected} />
+            {ocr.serialDetected && (
+              <>
+                <span className="text-muted-foreground">Serial</span>
+                <span className="font-mono">{ocr.serialDetected}</span>
+              </>
+            )}
+            <LabelRow label="Image Quality" value={ocr.imageQuality} />
+          </div>
+        </div>
+        <Separator />
+        <div>
+          <div className="text-muted-foreground mb-1.5 font-medium">Risk Assessment</div>
+          <div className="flex items-center gap-2 mb-1.5">
+            <Badge variant="outline" className={`text-[10px] ${riskBadgeClass(riskLevel)}`}>
+              {riskLevel} Risk
+            </Badge>
+            <div className="flex items-center gap-1.5">
+              <Progress value={riskScore} className="w-16 h-2" />
+              <span className="font-semibold">{riskScore}/100</span>
+            </div>
+          </div>
+        </div>
+        {ocr.reasonCodes && ocr.reasonCodes.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <div className="text-muted-foreground mb-1.5 font-medium">Verification Checks</div>
+              <div className="space-y-1">
+                {ocr.reasonCodes.map((code, i) => {
+                  const isSuccess = code.includes("SUCCESS") || code.includes("VALID")
+                  return (
+                    <div key={i} className="flex items-center gap-1.5">
+                      {isSuccess
+                        ? <CircleCheck className="h-3 w-3 text-green-600 shrink-0" />
+                        : <TriangleAlert className="h-3 w-3 text-amber-500 shrink-0" />}
+                      <span>{reasonCodeLabel(code)}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </>
+        )}
+        <Separator />
+        <div className="flex items-center gap-1.5">
+          {isLow ? <CircleCheck className="h-3.5 w-3.5 text-green-600" /> : isHigh ? <TriangleAlert className="h-3.5 w-3.5 text-red-500" /> : <TriangleAlert className="h-3.5 w-3.5 text-amber-500" />}
+          <span className="font-medium">
+            {isLow ? "Product appears genuine" : isHigh ? "Product may not be authentic" : "Further review recommended"}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function LyzrResponseCard({ data }: { data: LyzrResponseData }) {
+  if (data.ocr_verification) {
+    return <OcrVerificationCard ocr={data.ocr_verification as OcrVerification} />
+  }
+
   const a = data.return_request_analysis
   if (!a) return null
 

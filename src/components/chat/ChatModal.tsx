@@ -295,7 +295,7 @@ function ReturnFraudCard({ result }: { result: ReturnFraudResult }) {
 // Welcome screen
 // ---------------------------------------------------------------------------
 
-function WelcomeScreen({ onSelect }: { onSelect: (issue: string) => void }) {
+function WelcomeScreen({ onSelect: _ }: { onSelect: (issue: string) => void }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8">
       <img
@@ -303,11 +303,6 @@ function WelcomeScreen({ onSelect }: { onSelect: (issue: string) => void }) {
         alt="Welcome, We're here to help"
         className="w-72 h-auto"
       />
-      <div className="flex flex-wrap justify-center gap-2 mt-6">
-        <QuickChip label="Warranty & Replacement" onClick={() => onSelect("Warranty & Replacement")} />
-        <QuickChip label="Return a Product" onClick={() => onSelect("Return a Product")} />
-        <QuickChip label="Troubleshooting" onClick={() => onSelect("Troubleshooting")} />
-      </div>
     </div>
   )
 }
@@ -883,24 +878,6 @@ export function ChatModal({
               <div className="bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm">
                 <AgentActivityFeed events={ws.events} isConnected={ws.isConnected} />
               </div>
-            </div>
-          )}
-
-          {/* --- Welcome issue chips --- */}
-          {!isLyzrConfigured && step === "welcome" && !showWelcome && (
-            <div className="flex flex-wrap gap-2 pt-1 pl-10">
-              <QuickChip label="Warranty & Replacement" onClick={() => handleIssueSelect("Warranty & Replacement")} />
-              <QuickChip label="Return a Product" onClick={() => handleIssueSelect("Return a Product")} />
-              <QuickChip label="Product Registration" onClick={() => handleIssueSelect("Product Registration")} />
-              <QuickChip label="Troubleshooting" onClick={() => handleIssueSelect("Troubleshooting")} />
-            </div>
-          )}
-
-          {isLyzrConfigured && step === "welcome" && !showWelcome && (
-            <div className="flex flex-wrap gap-2 pt-1 pl-10">
-              <QuickChip label="Warranty & Replacement" onClick={() => handleLyzrMessage("I need help with warranty and replacement")} />
-              <QuickChip label="Return a Product" onClick={() => handleLyzrMessage("I need to return a product")} />
-              <QuickChip label="Troubleshooting" onClick={() => handleLyzrMessage("I need troubleshooting help")} />
             </div>
           )}
 
