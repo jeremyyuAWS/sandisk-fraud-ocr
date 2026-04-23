@@ -6,6 +6,7 @@ import { ChatLauncher } from "@/components/chat/ChatLauncher"
 import { ChatModal } from "@/components/chat/ChatModal"
 import { ScenarioSwitcher } from "@/components/support/ScenarioSwitcher"
 import { useLyzrConfig } from "@/data/lyzr-config"
+import { WelcomeModal } from "@/components/support/WelcomeModal"
 import type { AppView, ChatStep } from "@/data/app-state"
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
 
   return (
     <>
+      <WelcomeModal />
       <Toaster position="bottom-left" />
       <ScenarioSwitcher
         selected={selectedScenario}
