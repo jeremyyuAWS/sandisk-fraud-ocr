@@ -14,7 +14,7 @@ import type { LyzrAgentConfig } from "@/data/lyzr-config"
 import { MarkdownMessage } from "./MarkdownMessage"
 import { LyzrResponseCard, tryParseLyzrResponse } from "./LyzrResponseCard"
 import { AgentActivityFeed } from "./AgentActivityFeed"
-import { useLyzrWebSocket } from "@/hooks/useLyzrWebSocket"
+import { useLyzrWebSocket, type RawWsEvent } from "@/hooks/useLyzrWebSocket"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,6 +39,7 @@ interface ChatModalProps {
   isLyzrConfigured: boolean
   onResetSession: () => void
   onAddLog: (log: LogEntry) => void
+  onRawWsEvent?: (event: RawWsEvent) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -618,6 +619,7 @@ export function ChatModal({
   isLyzrConfigured: isLyzrConfiguredProp,
   onResetSession,
   onAddLog,
+  onRawWsEvent,
 }: ChatModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [serialInput, setSerialInput] = useState("")
@@ -651,7 +653,7 @@ export function ChatModal({
   const returnResultHandled = useRef(false)
   const scenario = scenarios[selectedScenario]
 
-  const ws = useLyzrWebSocket()
+  const ws = useLyzrWebSocket(onRawWsEvent)
 
   useEffect(() => {
     if (scrollRef.current) {

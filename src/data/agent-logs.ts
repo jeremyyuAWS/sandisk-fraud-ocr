@@ -63,4 +63,58 @@ export async function deleteLogsBySession(sessionId: string): Promise<void> {
 
 export async function deleteAllLogs(): Promise<void> {
   await supabase.from("agent_logs").delete().neq("session_id", "")
+  await supabase.from("ws_events").delete().neq("session_id", "")
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket raw events
+// ---------------------------------------------------------------------------
+
+export interface WsEventRow {
+  id: number
+  sessionId: string
+  payload: Record<string, unknown>
+  eventType: string
+  level: string
+  agentName: string
+  createdAt: string
+}
+
+export async function persistWsEvent(event: {
+  sessionId: string
+  payload: Record<string, unknown>
+  eventType: string
+  level: string
+  agentName: string
+}): Promise<void> {
+  await supabase.from("ws_events").insert({
+    session_id: event.sessionId,
+    payload: event.payload,
+    event_type: event.eventType,
+    level: event.level,
+    agent_name: event.agentName,
+  })
+}
+
+export async function loadWsEvents(): Promise<WsEventRow[]> {
+  const { data, error } = await supabase
+    .from("ws_events")
+    .select("id, session_id, payload, event_type, level, agent_name, created_at")
+    .order("created_at", { ascending: true })
+
+  if (error || !data) return []
+
+  return data.map((row) => ({
+    id: row.id,
+    sessionId: row.session_id,
+    payload: row.payload as Record<string, unknown>,
+    eventType: row.event_type,
+    level: row.level,
+    agentName: row.agent_name,
+    createdAt: row.created_at,
+  }))
+}
+
+export async function deleteWsEventsBySession(sessionId: string): Promise<void> {
+  await supabase.from("ws_events").delete().eq("session_id", sessionId)
 }

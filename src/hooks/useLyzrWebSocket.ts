@@ -6,15 +6,26 @@ export interface WsEvent {
   status: "pending" | "done"
 }
 
+export interface RawWsEvent {
+  sessionId: string
+  payload: Record<string, unknown>
+  eventType: string
+  level: string
+  agentName: string
+  receivedAt: string
+}
+
 function ts() {
   return new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase()
 }
 
-export function useLyzrWebSocket() {
+export function useLyzrWebSocket(onRawEvent?: (event: RawWsEvent) => void) {
   const [events, setEvents] = useState<WsEvent[]>([])
   const [isConnected, setIsConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const retryRef = useRef(0)
+  const onRawEventRef = useRef(onRawEvent)
+  onRawEventRef.current = onRawEvent
 
   const disconnect = useCallback(() => {
     if (wsRef.current) {
@@ -39,14 +50,28 @@ export function useLyzrWebSocket() {
       }
 
       ws.onmessage = (e) => {
+        let parsed: Record<string, unknown> | null = null
         let text = ""
         try {
-          const parsed = JSON.parse(e.data)
-          text = parsed.message || parsed.text || parsed.status || JSON.stringify(parsed)
+          parsed = JSON.parse(e.data)
+          text = (parsed!.message || parsed!.text || parsed!.status || JSON.stringify(parsed)) as string
         } catch {
           text = String(e.data)
         }
+
         if (!text || text === "ping") return
+
+        if (parsed && onRawEventRef.current) {
+          onRawEventRef.current({
+            sessionId,
+            payload: parsed,
+            eventType: (parsed.event_type as string) || "",
+            level: (parsed.level as string) || "",
+            agentName: (parsed.agent_name as string) || "",
+            receivedAt: new Date().toISOString(),
+          })
+        }
+
         if (text.toLowerCase().includes("in_progress")) return
 
         setEvents((prev) => {

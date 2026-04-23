@@ -7,7 +7,7 @@ import { ChatModal } from "@/components/chat/ChatModal"
 import { ScenarioSwitcherPanel } from "@/components/support/ScenarioSwitcher"
 import { LogsViewer } from "@/components/logs/LogsViewer"
 import { useLyzrConfig } from "@/data/lyzr-config"
-import { type LogEntry, persistLog, loadLogs, deleteLogsBySession, deleteAllLogs } from "@/data/agent-logs"
+import { type LogEntry, type WsEventRow, persistLog, loadLogs, deleteLogsBySession, deleteAllLogs, persistWsEvent, loadWsEvents, deleteWsEventsBySession } from "@/data/agent-logs"
 import { WelcomeModal } from "@/components/support/WelcomeModal"
 import type { AppView, ChatStep } from "@/data/app-state"
 
@@ -20,10 +20,12 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [agentLogs, setAgentLogs] = useState<LogEntry[]>([])
+  const [wsEvents, setWsEvents] = useState<WsEventRow[]>([])
   const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured, resetSession: resetLyzrSession } = useLyzrConfig()
 
   useEffect(() => {
     loadLogs().then(setAgentLogs)
+    loadWsEvents().then(setWsEvents)
   }, [])
 
   const addLog = useCallback((log: LogEntry) => {
@@ -38,7 +40,23 @@ export default function App() {
 
   const deleteSession = useCallback((sessionId: string) => {
     setAgentLogs((prev) => prev.filter((l) => l.sessionId !== sessionId))
+    setWsEvents((prev) => prev.filter((e) => e.sessionId !== sessionId))
     deleteLogsBySession(sessionId)
+    deleteWsEventsBySession(sessionId)
+  }, [])
+
+  const handleRawWsEvent = useCallback((event: { sessionId: string; payload: Record<string, unknown>; eventType: string; level: string; agentName: string }) => {
+    const row: WsEventRow = {
+      id: Date.now() + Math.random(),
+      sessionId: event.sessionId,
+      payload: event.payload,
+      eventType: event.eventType,
+      level: event.level,
+      agentName: event.agentName,
+      createdAt: new Date().toISOString(),
+    }
+    setWsEvents((prev) => [...prev, row])
+    persistWsEvent(event)
   }, [])
 
   const openChat = useCallback(() => {
@@ -102,6 +120,7 @@ export default function App() {
             isLyzrConfigured={isLyzrConfigured}
             onResetSession={resetLyzrSession}
             onAddLog={addLog}
+            onRawWsEvent={handleRawWsEvent}
           />
         </>
       ) : (
@@ -114,6 +133,7 @@ export default function App() {
       <LogsViewer
         open={logsOpen}
         logs={agentLogs}
+        wsEvents={wsEvents}
         onClose={() => setLogsOpen(false)}
         onClear={clearLogs}
         onDeleteSession={deleteSession}
