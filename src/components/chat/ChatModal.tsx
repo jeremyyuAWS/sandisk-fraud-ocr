@@ -782,12 +782,21 @@ export function ChatModal({
   function startConversation() {
     onResetSession()
     setShowWelcome(false)
-    addMsg("bot", "Hello! Welcome to SanDisk Support. I can help with warranty, replacement status, product returns, and troubleshooting.")
+    if (!isLyzrConfigured) {
+      addMsg("bot", "Hello! Welcome to SanDisk Support. I can help with warranty, replacement status, product returns, and troubleshooting.")
+    }
   }
 
   function handleWelcomeSelect(issue: string) {
     onResetSession()
     setShowWelcome(false)
+
+    if (isLyzrConfigured) {
+      setMessages([])
+      setTimeout(() => handleLyzrMessage(issue === "Return a Product" ? "need to return a product" : issue), 100)
+      return
+    }
+
     if (issue === "Return a Product") {
       setMessages([
         { from: "user", text: "need to return a product", timestamp: now() },
@@ -800,12 +809,6 @@ export function ChatModal({
         ])
         onStepChange("return-30day")
       }, 300)
-      return
-    }
-
-    if (isLyzrConfigured) {
-      setMessages([{ from: "bot", text: "Hello! Welcome to SanDisk Support. How can I help you today?", timestamp: now() }])
-      setTimeout(() => handleLyzrMessage(issue), 100)
       return
     }
 
@@ -865,6 +868,9 @@ export function ChatModal({
     setFreeInput("")
     if (showWelcome) {
       startConversation()
+      if (isLyzrConfigured) {
+        handleLyzrMessage(msg)
+      }
       return
     }
     if (isLyzrConfigured) {
@@ -925,7 +931,6 @@ export function ChatModal({
     const objectUrl = URL.createObjectURL(file)
     onImageUploaded?.(objectUrl)
     addComponent("user", <ImagePreview src={objectUrl} alt="Uploaded product" />)
-    addMsg("bot", "Image received. Analyzing your product now...")
     setIsSending(true)
     ws.connect(lyzrConfig.sessionId, lyzrConfig.apiKey)
     addLog("request", lyzrConfig.sessionId, {
