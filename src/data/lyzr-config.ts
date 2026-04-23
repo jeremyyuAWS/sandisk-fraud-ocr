@@ -10,22 +10,31 @@ export interface LyzrAgentConfig {
 
 const STORAGE_KEY = "sandisk-lyzr-config"
 
+function generateSessionId(agentId: string): string {
+  const random = Math.random().toString(36).substring(2, 13)
+  return `${agentId}-${random}`
+}
+
 const defaultConfig: LyzrAgentConfig = {
   enabled: true,
   apiKey: "sk-default-D0plT8nq8DdRpw5LR956a7J4Df7Yo2QC",
   agentId: "69ea29fa48859962fb807a69",
   userId: "jeremy.yu@movate.com",
-  sessionId: "69ea29fa48859962fb807a69-lc18hxoveym",
+  sessionId: "",
 }
 
 function loadConfig(): LyzrAgentConfig {
+  let config = { ...defaultConfig }
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) return { ...defaultConfig, ...JSON.parse(stored) }
+    if (stored) config = { ...defaultConfig, ...JSON.parse(stored) }
   } catch {
     // ignore
   }
-  return defaultConfig
+  if (!config.sessionId) {
+    config.sessionId = generateSessionId(config.agentId)
+  }
+  return config
 }
 
 function saveConfig(config: LyzrAgentConfig) {

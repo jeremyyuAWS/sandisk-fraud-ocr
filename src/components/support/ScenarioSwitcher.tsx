@@ -141,16 +141,6 @@ function LyzrSettingsPanel({
             className="h-7 text-xs"
           />
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="lyzr-session-id" className="text-xs">Session ID</Label>
-          <Input
-            id="lyzr-session-id"
-            placeholder="optional - auto-generated if empty"
-            value={config.sessionId}
-            onChange={(e) => onChange({ sessionId: e.target.value })}
-            className="h-7 text-xs font-mono"
-          />
-        </div>
       </div>
       {config.enabled && config.apiKey && config.agentId && config.userId && (
         <Badge variant="outline" className="w-fit bg-green-50 text-green-700 border-green-200 text-[10px]">
