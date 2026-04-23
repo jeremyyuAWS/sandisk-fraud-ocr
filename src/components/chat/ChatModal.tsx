@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw, ScanSearch, Activity, ScrollText, ArrowDown, ArrowUp, Copy, Check } from "lucide-react"
+import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw, ScanSearch, Activity } from "lucide-react"
+import { createLogEntry, type LogEntry } from "@/data/agent-logs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -26,14 +27,6 @@ interface ChatMessage {
   timestamp?: string
 }
 
-interface LogEntry {
-  id: number
-  timestamp: string
-  direction: "request" | "response"
-  sessionId: string
-  data: Record<string, unknown>
-}
-
 interface ChatModalProps {
   open: boolean
   step: ChatStep
@@ -45,6 +38,7 @@ interface ChatModalProps {
   lyzrConfig: LyzrAgentConfig
   isLyzrConfigured: boolean
   onResetSession: () => void
+  onAddLog: (log: LogEntry) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -541,103 +535,6 @@ function ImageAnalysisTextCard({ text }: { text: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Logs Panel
-// ---------------------------------------------------------------------------
-
-let logIdCounter = 0
-
-function LogsPanel({ logs, onClear }: { logs: LogEntry[]; onClear: () => void }) {
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
-  const [copiedId, setCopiedId] = useState<number | null>(null)
-  const logsEndRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [logs.length])
-
-  function toggleExpand(id: number) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  function copyLog(log: LogEntry) {
-    navigator.clipboard.writeText(JSON.stringify(log.data, null, 2))
-    setCopiedId(log.id)
-    setTimeout(() => setCopiedId(null), 1500)
-  }
-
-  if (logs.length === 0) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center px-6 gap-2 text-muted-foreground">
-        <ScrollText className="h-8 w-8" />
-        <p className="text-sm font-medium">No logs yet</p>
-        <p className="text-xs text-center">Interactions with the Movate agent will be recorded here.</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-muted/30 shrink-0">
-        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-          {logs.length} log {logs.length === 1 ? "entry" : "entries"}
-        </span>
-        <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={onClear}>
-          Clear
-        </Button>
-      </div>
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5">
-        {logs.map((log) => {
-          const isExpanded = expandedIds.has(log.id)
-          const isReq = log.direction === "request"
-          return (
-            <div key={log.id} className="rounded-md border border-border bg-background text-xs">
-              <button
-                type="button"
-                onClick={() => toggleExpand(log.id)}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left cursor-pointer hover:bg-muted/50 transition-colors"
-              >
-                <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${isReq ? "bg-blue-500" : "bg-green-500"}`} />
-                <span className="font-mono text-[10px] text-muted-foreground shrink-0">{log.timestamp}</span>
-                <span className={`font-semibold text-[10px] uppercase shrink-0 ${isReq ? "text-blue-600" : "text-green-600"}`}>
-                  {log.direction}
-                </span>
-                <span className="text-muted-foreground text-[10px] truncate flex-1 font-mono">
-                  session: {log.sessionId.slice(-8)}
-                </span>
-                {isExpanded ? <ArrowUp className="h-3 w-3 text-muted-foreground shrink-0" /> : <ArrowDown className="h-3 w-3 text-muted-foreground shrink-0" />}
-              </button>
-              {isExpanded && (
-                <div className="border-t border-border">
-                  <div className="flex justify-end px-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => copyLog(log)}
-                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    >
-                      {copiedId === log.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                      {copiedId === log.id ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                  <pre className="px-2.5 py-1.5 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed max-h-48 overflow-y-auto">
-                    {JSON.stringify(log.data, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          )
-        })}
-        <div ref={logsEndRef} />
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Return fraud scenario engine
 // ---------------------------------------------------------------------------
 
@@ -720,6 +617,7 @@ export function ChatModal({
   lyzrConfig,
   isLyzrConfigured: isLyzrConfiguredProp,
   onResetSession,
+  onAddLog,
 }: ChatModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [serialInput, setSerialInput] = useState("")
@@ -730,22 +628,11 @@ export function ChatModal({
   const [showWelcome, setShowWelcome] = useState(true)
   const [useLive, setUseLive] = useState(false)
   const [showWsActivity, setShowWsActivity] = useState(true)
-  const [activeTab, setActiveTab] = useState<"chat" | "logs">("chat")
-  const [agentLogs, setAgentLogs] = useState<LogEntry[]>([])
 
   const isLyzrConfigured = useLive && isLyzrConfiguredProp
 
   function addLog(direction: "request" | "response", sessionId: string, data: Record<string, unknown>) {
-    setAgentLogs((prev) => [
-      ...prev,
-      {
-        id: ++logIdCounter,
-        timestamp: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }).toLowerCase(),
-        direction,
-        sessionId,
-        data,
-      },
-    ])
+    onAddLog(createLogEntry(direction, sessionId, data))
   }
 
   // Return flow state
@@ -883,11 +770,9 @@ export function ChatModal({
     ws.disconnect()
     ws.clearEvents()
     setMessages([])
-    setAgentLogs([])
     setShowWelcome(true)
     setFreeInput("")
     setIsSending(false)
-    setActiveTab("chat")
     onStepChange("welcome")
   }
 
@@ -1211,17 +1096,6 @@ export function ChatModal({
               variant="ghost"
               size="icon"
               className="h-7 w-7"
-              title={activeTab === "logs" ? "Show chat" : "Show logs"}
-              onClick={() => setActiveTab((t) => t === "chat" ? "logs" : "chat")}
-            >
-              <ScrollText className={`h-3.5 w-3.5 ${activeTab === "logs" ? "text-blue-600" : "text-muted-foreground"}`} />
-            </Button>
-          )}
-          {isLyzrConfigured && !showWelcome && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
               title="New session"
               onClick={handleNewSession}
             >
@@ -1242,13 +1116,8 @@ export function ChatModal({
         </div>
       </div>
 
-      {/* Logs Panel */}
-      {activeTab === "logs" && (
-        <LogsPanel logs={agentLogs} onClear={() => setAgentLogs([])} />
-      )}
-
       {/* Welcome Screen */}
-      {activeTab === "chat" && showWelcome && step === "welcome" && (
+      {showWelcome && step === "welcome" && (
         <WelcomeScreen
           useLive={useLive}
           onToggleMode={setUseLive}
@@ -1257,7 +1126,7 @@ export function ChatModal({
       )}
 
       {/* Conversation Messages */}
-      {activeTab === "chat" && showConversation && (
+      {showConversation && (
         <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
           {messages.map((msg, i) => (
             <MessageBubble key={i} msg={msg} expanded={isExpanded} />
@@ -1432,8 +1301,7 @@ export function ChatModal({
       )}
 
       {/* Bottom bar */}
-      {activeTab === "chat" && <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />}
-      {activeTab === "chat" && (
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
       <div className="mt-auto border-t border-border px-4 py-3 flex items-center gap-3 shrink-0">
         <button
           type="button"
@@ -1476,7 +1344,6 @@ export function ChatModal({
           <ArrowRight className="h-5 w-5" />
         </button>
       </div>
-      )}
     </div>
   )
 }

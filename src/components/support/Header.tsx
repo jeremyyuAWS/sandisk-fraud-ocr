@@ -1,5 +1,6 @@
-import { Search, ShoppingCart, User, Settings } from "lucide-react"
+import { Search, ShoppingCart, User, Settings, ScrollText } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 
 const navItems = [
@@ -16,9 +17,11 @@ interface HeaderProps {
   settingsPanel?: React.ReactNode
   settingsOpen?: boolean
   onSettingsToggle?: () => void
+  logCount?: number
+  onLogsOpen?: () => void
 }
 
-export function Header({ settingsPanel, settingsOpen, onSettingsToggle }: HeaderProps) {
+export function Header({ settingsPanel, settingsOpen, onSettingsToggle, logCount = 0, onLogsOpen }: HeaderProps) {
   return (
     <header className="w-full">
       <div className="bg-foreground text-primary-foreground px-6 py-1.5 text-xs flex items-center justify-between">
@@ -87,6 +90,21 @@ export function Header({ settingsPanel, settingsOpen, onSettingsToggle }: Header
           >
             <Search className="h-5 w-5" />
           </Button>
+          <div className="relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onLogsOpen}
+              title="Agent Logs"
+            >
+              <ScrollText className="h-5 w-5" />
+              {logCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[9px] bg-sandisk-red text-white border-0 flex items-center justify-center">
+                  {logCount}
+                </Badge>
+              )}
+            </Button>
+          </div>
           <div className="relative">
             <Button
               variant="ghost"

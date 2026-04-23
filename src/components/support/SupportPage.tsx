@@ -17,12 +17,14 @@ interface SupportPageProps {
   settingsPanel?: React.ReactNode
   settingsOpen?: boolean
   onSettingsToggle?: () => void
+  logCount?: number
+  onLogsOpen?: () => void
 }
 
-export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle }: SupportPageProps) {
+export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle, logCount, onLogsOpen }: SupportPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <Header settingsPanel={settingsPanel} settingsOpen={settingsOpen} onSettingsToggle={onSettingsToggle} />
+      <Header settingsPanel={settingsPanel} settingsOpen={settingsOpen} onSettingsToggle={onSettingsToggle} logCount={logCount} onLogsOpen={onLogsOpen} />
       <HeroBanner />
       <SupportCategories />
       <section className="py-12 px-8 max-w-5xl mx-auto">
