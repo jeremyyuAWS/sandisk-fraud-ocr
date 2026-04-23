@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 
 export interface LyzrAgentConfig {
   enabled: boolean
@@ -9,6 +10,7 @@ export interface LyzrAgentConfig {
 }
 
 const STORAGE_KEY = "sandisk-lyzr-config"
+const DB_KEY = "lyzr_agent_config"
 
 function generateSessionId(agentId: string): string {
   const random = Math.random().toString(36).substring(2, 13)
@@ -23,7 +25,7 @@ const defaultConfig: LyzrAgentConfig = {
   sessionId: "",
 }
 
-function loadConfig(): LyzrAgentConfig {
+function loadLocalConfig(): LyzrAgentConfig {
   let config = { ...defaultConfig }
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
@@ -37,17 +39,44 @@ function loadConfig(): LyzrAgentConfig {
   return config
 }
 
-function saveConfig(config: LyzrAgentConfig) {
+function saveLocalConfig(config: LyzrAgentConfig) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
 }
 
+function saveToDb(config: LyzrAgentConfig) {
+  const { sessionId: _, ...persistent } = config
+  supabase
+    .from("app_config")
+    .upsert({ key: DB_KEY, value: persistent, updated_at: new Date().toISOString() })
+    .then()
+}
+
 export function useLyzrConfig() {
-  const [config, setConfigState] = useState<LyzrAgentConfig>(loadConfig)
+  const [config, setConfigState] = useState<LyzrAgentConfig>(loadLocalConfig)
+
+  useEffect(() => {
+    supabase
+      .from("app_config")
+      .select("value")
+      .eq("key", DB_KEY)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.value && typeof data.value === "object") {
+          setConfigState((prev) => {
+            const merged = { ...prev, ...data.value as Partial<LyzrAgentConfig> }
+            if (!merged.sessionId) merged.sessionId = generateSessionId(merged.agentId)
+            saveLocalConfig(merged)
+            return merged
+          })
+        }
+      })
+  }, [])
 
   const setConfig = useCallback((updates: Partial<LyzrAgentConfig>) => {
     setConfigState((prev) => {
       const next = { ...prev, ...updates }
-      saveConfig(next)
+      saveLocalConfig(next)
+      saveToDb(next)
       return next
     })
   }, [])
@@ -55,7 +84,7 @@ export function useLyzrConfig() {
   const resetSession = useCallback(() => {
     setConfigState((prev) => {
       const next = { ...prev, sessionId: generateSessionId(prev.agentId) }
-      saveConfig(next)
+      saveLocalConfig(next)
       return next
     })
   }, [])
