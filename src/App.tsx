@@ -19,12 +19,11 @@ export default function App() {
 
   const openChat = useCallback(() => {
     setChatOpen(true)
-    setChatStep("welcome")
+    setChatStep((prev) => (prev === "closed" ? "welcome" : prev))
   }, [])
 
   const closeChat = useCallback(() => {
     setChatOpen(false)
-    setChatStep("closed")
   }, [])
 
   const handleEscalate = useCallback(() => {
@@ -34,14 +33,13 @@ export default function App() {
 
   const handleBackToSupport = useCallback(() => {
     setCurrentView("support")
-    setChatStep("closed")
     setChatOpen(false)
   }, [])
 
   const handleScenarioChange = useCallback((id: string) => {
     setSelectedScenario(id)
     setChatOpen(false)
-    setChatStep("closed")
+    setChatStep("welcome")
   }, [])
 
   return (

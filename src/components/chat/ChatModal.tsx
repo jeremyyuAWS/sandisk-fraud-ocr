@@ -793,8 +793,6 @@ export function ChatModal({
 
   // ---
 
-  if (!open) return null
-
   const sizeClasses = isExpanded
     ? "fixed inset-4 z-50 w-auto h-auto"
     : "fixed bottom-6 right-6 z-50 w-[390px] h-[600px]"
@@ -832,7 +830,7 @@ export function ChatModal({
 
   return (
     <div
-      className={`${sizeClasses} bg-background border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200`}
+      className={`${sizeClasses} bg-background border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${!open ? "hidden" : ""}`}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-background shrink-0">
@@ -1022,7 +1020,7 @@ export function ChatModal({
                   <QuickChip label="Continue Claim" onClick={() => {
                     addMsg("user", "Continue Claim")
                     addMsg("bot", "Your replacement has been approved. You will receive a confirmation email shortly. Thank you for choosing SanDisk!")
-                    onStepChange("closed")
+                    onStepChange("escalation")
                   }} />
                   <QuickChip label="Chat with Agent" onClick={onEscalate} />
                 </>

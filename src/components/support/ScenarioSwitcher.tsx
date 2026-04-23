@@ -1,4 +1,4 @@
-import { Settings } from "lucide-react"
+import { Settings, Eye, EyeOff } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -99,6 +99,8 @@ function LyzrSettingsPanel({
   config: LyzrAgentConfig
   onChange: (updates: Partial<LyzrAgentConfig>) => void
 }) {
+  const [showApiKey, setShowApiKey] = useState(false)
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -116,14 +118,23 @@ function LyzrSettingsPanel({
       <div className="space-y-2.5">
         <div className="space-y-1">
           <Label htmlFor="lyzr-api-key" className="text-xs">API Key</Label>
-          <Input
-            id="lyzr-api-key"
-            type="password"
-            placeholder="sk-default-..."
-            value={config.apiKey}
-            onChange={(e) => onChange({ apiKey: e.target.value })}
-            className="h-7 text-xs font-mono"
-          />
+          <div className="relative">
+            <Input
+              id="lyzr-api-key"
+              type={showApiKey ? "text" : "password"}
+              placeholder="sk-default-..."
+              value={config.apiKey}
+              onChange={(e) => onChange({ apiKey: e.target.value })}
+              className="h-7 text-xs font-mono pr-8"
+            />
+            <button
+              type="button"
+              onClick={() => setShowApiKey((v) => !v)}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            </button>
+          </div>
         </div>
         <div className="space-y-1">
           <Label htmlFor="lyzr-agent-id" className="text-xs">Agent ID</Label>
