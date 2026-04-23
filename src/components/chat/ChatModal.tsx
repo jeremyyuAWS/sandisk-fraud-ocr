@@ -780,11 +780,13 @@ export function ChatModal({
 
   // Welcome -> conversation
   function startConversation() {
+    onResetSession()
     setShowWelcome(false)
     addMsg("bot", "Hello! Welcome to SanDisk Support. I can help with warranty, replacement status, product returns, and troubleshooting.")
   }
 
   function handleWelcomeSelect(issue: string) {
+    onResetSession()
     setShowWelcome(false)
     if (issue === "Return a Product") {
       setMessages([
