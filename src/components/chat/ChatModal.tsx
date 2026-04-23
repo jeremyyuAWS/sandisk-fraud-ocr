@@ -299,15 +299,7 @@ function ReturnFraudCard({ result }: { result: ReturnFraudResult }) {
 // Welcome screen
 // ---------------------------------------------------------------------------
 
-function WelcomeScreen({
-  useLive,
-  onToggleMode,
-  showModeToggle,
-}: {
-  useLive: boolean
-  onToggleMode: (live: boolean) => void
-  showModeToggle: boolean
-}) {
+function WelcomeScreen() {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 gap-4">
       <img
@@ -315,24 +307,6 @@ function WelcomeScreen({
         alt="Welcome, We're here to help"
         className="w-72 h-auto"
       />
-      {showModeToggle && (
-        <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-4 py-2.5">
-          <button
-            type="button"
-            onClick={() => onToggleMode(false)}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${!useLive ? "bg-background text-foreground shadow-sm border border-border" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            Simulated
-          </button>
-          <button
-            type="button"
-            onClick={() => onToggleMode(true)}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-colors ${useLive ? "bg-green-600 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-          >
-            Live Agent
-          </button>
-        </div>
-      )}
     </div>
   )
 }
@@ -628,10 +602,9 @@ export function ChatModal({
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
-  const [useLive, setUseLive] = useState(false)
   const [showWsActivity, setShowWsActivity] = useState(true)
 
-  const isLyzrConfigured = useLive && isLyzrConfiguredProp
+  const isLyzrConfigured = isLyzrConfiguredProp
 
   function addLog(direction: "request" | "response", sessionId: string, data: Record<string, unknown>) {
     onAddLog(createLogEntry(direction, sessionId, data))
@@ -790,8 +763,11 @@ export function ChatModal({
   // Welcome -> conversation
   function startConversation() {
     resetAndSync()
+    setMessages([])
     setShowWelcome(false)
-    if (!isLyzrConfigured) {
+    if (isLyzrConfigured) {
+      handleLyzrMessage("hello")
+    } else {
       addMsg("bot", "Hello! Welcome to SanDisk Support. I can help with warranty, replacement status, product returns, and troubleshooting.")
     }
   }
@@ -877,9 +853,14 @@ export function ChatModal({
     if (!msg) return
     setFreeInput("")
     if (showWelcome) {
-      startConversation()
+      resetAndSync()
+      setMessages([])
+      setShowWelcome(false)
       if (isLyzrConfigured) {
         handleLyzrMessage(msg)
+      } else {
+        addMsg("bot", "Hello! Welcome to SanDisk Support.")
+        addMsg("user", msg)
       }
       return
     }
@@ -888,7 +869,7 @@ export function ChatModal({
       return
     }
     addMsg("user", msg)
-    addMsg("bot", "Thank you for your message. For this demo, please select one of the support options above or switch to Live mode to chat with the AI agent.")
+    addMsg("bot", "Thank you for your message. Please select one of the support options above.")
   }
 
   // Warranty flow handlers
@@ -1095,11 +1076,6 @@ export function ChatModal({
           <span className="text-xs font-bold tracking-wide text-foreground shrink-0">CHAT</span>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          {isLyzrConfiguredProp && !showWelcome && (
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded mr-0.5 ${useLive ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-              {useLive ? "Live" : "Sim"}
-            </span>
-          )}
           {isLyzrConfigured && !showWelcome && (
             <Button
               variant="ghost"
@@ -1157,11 +1133,7 @@ export function ChatModal({
 
       {/* Welcome Screen */}
       {showWelcome && step === "welcome" && (
-        <WelcomeScreen
-          useLive={useLive}
-          onToggleMode={setUseLive}
-          showModeToggle={isLyzrConfiguredProp}
-        />
+        <WelcomeScreen />
       )}
 
       {/* Conversation Messages */}
