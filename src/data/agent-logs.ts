@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase"
 export interface LogEntry {
   id: number
   timestamp: string
+  createdAt: string
   direction: "request" | "response"
   sessionId: string
   data: Record<string, unknown>
@@ -15,11 +16,13 @@ export function createLogEntry(
   sessionId: string,
   data: Record<string, unknown>
 ): LogEntry {
+  const now = new Date()
   return {
     id: ++counter,
-    timestamp: new Date()
+    timestamp: now
       .toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })
       .toLowerCase(),
+    createdAt: now.toISOString(),
     direction,
     sessionId,
     data,
@@ -48,6 +51,7 @@ export async function loadLogs(): Promise<LogEntry[]> {
     const entry: LogEntry = {
       id: row.id,
       timestamp: row.timestamp_label,
+      createdAt: row.created_at,
       direction: row.direction as "request" | "response",
       sessionId: row.session_id,
       data: row.payload as Record<string, unknown>,

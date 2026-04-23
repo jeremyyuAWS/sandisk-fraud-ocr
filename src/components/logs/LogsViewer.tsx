@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useMemo } from "react"
-import { X, Search, Copy, Check, ChevronDown, ChevronUp, ScrollText, Trash2, ListFilter as Filter, ArrowUpRight, ArrowDownLeft, Radio } from "lucide-react"
+import { useState, useRef, useEffect, useMemo, useCallback } from "react"
+import { X, Search, Copy, Check, ChevronDown, ChevronUp, ScrollText, Trash2, ListFilter as Filter, ArrowUpRight, ArrowDownLeft, Radio, Globe } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { LogEntry } from "@/data/agent-logs"
 import type { WsEventRow } from "@/data/agent-logs"
 
@@ -62,6 +63,35 @@ function getEventColor(eventType: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Timezone helpers
+// ---------------------------------------------------------------------------
+
+const TIMEZONES = [
+  { value: "local", label: "Local", zone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+  { value: "America/New_York", label: "US Eastern (ET)" },
+  { value: "America/Chicago", label: "US Central (CT)" },
+  { value: "America/Denver", label: "US Mountain (MT)" },
+  { value: "America/Los_Angeles", label: "US Pacific (PT)" },
+  { value: "Asia/Kolkata", label: "India (IST)" },
+  { value: "UTC", label: "UTC" },
+] as const
+
+function formatTimeInTz(isoString: string | undefined, tz: string): string {
+  if (!isoString) return ""
+  try {
+    const zone = tz === "local" ? undefined : tz
+    return new Date(isoString).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZone: zone,
+    }).toLowerCase()
+  } catch {
+    return isoString
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -75,7 +105,10 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
   const [expandedWsIds, setExpandedWsIds] = useState<Set<number>>(new Set())
   const [copiedId, setCopiedId] = useState<number | null>(null)
   const [copiedSession, setCopiedSession] = useState<string | null>(null)
+  const [timezone, setTimezone] = useState("local")
   const logsEndRef = useRef<HTMLDivElement>(null)
+
+  const fmtTime = useCallback((iso: string | undefined) => formatTimeInTz(iso, timezone), [timezone])
 
   useEffect(() => {
     if (open) {
@@ -127,14 +160,14 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
       groups.push({
         sessionId,
         logs: sessionLogs,
-        firstTimestamp: sessionLogs[0].timestamp,
-        lastTimestamp: sessionLogs[sessionLogs.length - 1].timestamp,
+        firstTimestamp: fmtTime(sessionLogs[0].createdAt) || sessionLogs[0].timestamp,
+        lastTimestamp: fmtTime(sessionLogs[sessionLogs.length - 1].createdAt) || sessionLogs[sessionLogs.length - 1].timestamp,
         requestCount: sessionLogs.filter((l) => l.direction === "request").length,
         responseCount: sessionLogs.filter((l) => l.direction === "response").length,
       })
     }
     return groups
-  }, [filteredLogs])
+  }, [filteredLogs, fmtTime])
 
   // --- WebSocket events ---
 
@@ -322,6 +355,21 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+            <Select value={timezone} onValueChange={setTimezone}>
+              <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {TIMEZONES.map((tz) => (
+                  <SelectItem key={tz.value} value={tz.value} className="text-xs">
+                    {tz.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <Button variant="outline" size="sm" onClick={copyAllFiltered} disabled={totalEntries === 0}>
             <Copy className="h-3.5 w-3.5 mr-1.5" />
             Export
@@ -465,6 +513,7 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
             setDirectionFilter={setDirectionFilter}
             SyntaxJson={SyntaxJson}
             logsEndRef={logsEndRef}
+            fmtTime={fmtTime}
           />
         ) : (
           <WsEventsContent
@@ -484,6 +533,7 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
             setSessionFilter={setSessionFilter}
             SyntaxJson={SyntaxJson}
             logsEndRef={logsEndRef}
+            fmtTime={fmtTime}
           />
         )}
       </div>
@@ -498,7 +548,7 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
 function ApiLogsContent({
   sessionGroups, logs, filteredLogs, expandedSessions, expandedIds, copiedId, copiedSession,
   toggleSession, togglePayload, copyLog, copySessionId, onDeleteSession,
-  setSearchQuery, setSessionFilter, setDirectionFilter, SyntaxJson, logsEndRef,
+  setSearchQuery, setSessionFilter, setDirectionFilter, SyntaxJson, logsEndRef, fmtTime,
 }: {
   sessionGroups: SessionGroup[]
   logs: LogEntry[]
@@ -517,6 +567,7 @@ function ApiLogsContent({
   setDirectionFilter: (d: "all" | "request" | "response") => void
   SyntaxJson: React.ComponentType<{ data: Record<string, unknown> }>
   logsEndRef: React.RefObject<HTMLDivElement | null>
+  fmtTime: (iso: string | undefined) => string
 }) {
   if (sessionGroups.length === 0) {
     return (
@@ -595,7 +646,7 @@ function ApiLogsContent({
                           <Badge variant="outline" className={`text-[10px] uppercase font-semibold shrink-0 ${isReq ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"}`}>
                             {log.direction}
                           </Badge>
-                          <span className="font-mono text-xs text-muted-foreground shrink-0">{log.timestamp}</span>
+                          <span className="font-mono text-xs text-muted-foreground shrink-0">{fmtTime(log.createdAt) || log.timestamp}</span>
                           <span className="text-xs text-muted-foreground truncate flex-1">{Object.keys(log.data).length} fields</span>
                           {isPayloadOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
                         </button>
@@ -632,7 +683,7 @@ function ApiLogsContent({
 function WsEventsContent({
   wsSessionGroups, wsEvents, filteredWsEvents, expandedSessions, expandedWsIds, copiedId, copiedSession,
   toggleSession, toggleWsPayload, copyWsEvent, copySessionId, onDeleteSession,
-  setSearchQuery, setSessionFilter, SyntaxJson, logsEndRef,
+  setSearchQuery, setSessionFilter, SyntaxJson, logsEndRef, fmtTime,
 }: {
   wsSessionGroups: { sessionId: string; events: WsEventRow[] }[]
   wsEvents: WsEventRow[]
@@ -650,6 +701,7 @@ function WsEventsContent({
   setSessionFilter: (s: string | null) => void
   SyntaxJson: React.ComponentType<{ data: Record<string, unknown> }>
   logsEndRef: React.RefObject<HTMLDivElement | null>
+  fmtTime: (iso: string | undefined) => string
 }) {
   if (wsSessionGroups.length === 0) {
     return (
@@ -720,7 +772,7 @@ function WsEventsContent({
                     const levelStyle = getLevelStyle(ev.level)
                     const eventColor = getEventColor(ev.eventType)
                     const ts = ev.payload.timestamp as string | undefined
-                    const timeLabel = ts ? new Date(ts).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }).toLowerCase() : ""
+                    const timeLabel = fmtTime(ts || ev.createdAt)
                     const status = ev.payload.status as string | undefined
 
                     return (
