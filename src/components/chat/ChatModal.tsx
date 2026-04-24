@@ -15,6 +15,7 @@ import { MarkdownMessage } from "./MarkdownMessage"
 import { LyzrResponseCard, tryParseLyzrResponse } from "./LyzrResponseCard"
 import { AgentActivityFeed } from "./AgentActivityFeed"
 import { useLyzrWebSocket, type RawWsEvent } from "@/hooks/useLyzrWebSocket"
+import { parseValidationFromResponse, normalizeChecks, persistValidationResult, type ValidationResultRow } from "@/data/validation-results"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,6 +41,7 @@ interface ChatModalProps {
   onResetSession: () => { sessionId: string; userId: string }
   onAddLog: (log: LogEntry) => void
   onRawWsEvent?: (event: RawWsEvent) => void
+  onValidationResult?: (result: ValidationResultRow) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -613,6 +615,7 @@ export function ChatModal({
   onResetSession,
   onAddLog,
   onRawWsEvent,
+  onValidationResult,
 }: ChatModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [serialInput, setSerialInput] = useState("")
@@ -830,6 +833,29 @@ export function ChatModal({
     onStepChange("warranty-subtype")
   }
 
+  function extractAndPersistValidation(responseText: string): string {
+    const cfg = lyzrConfigRef.current
+    const extracted = parseValidationFromResponse(responseText)
+    if (!extracted) return responseText
+
+    const { checks, overallStatus, inputSummary } = normalizeChecks(extracted.validationJson)
+    const row: ValidationResultRow = {
+      id: Date.now() + Math.random(),
+      sessionId: cfg.sessionId,
+      agentId: cfg.agentId,
+      userId: cfg.userId,
+      inputSummary,
+      rawResult: extracted.validationJson,
+      checks,
+      overallStatus,
+      createdAt: new Date().toISOString(),
+    }
+    persistValidationResult(row)
+    onValidationResult?.(row)
+
+    return extracted.chatText || responseText
+  }
+
   // Lyzr
   async function handleLyzrMessage(userMessage: string) {
     const cfg = lyzrConfigRef.current
@@ -846,11 +872,12 @@ export function ChatModal({
       const result = await sendToLyzr(cfg, userMessage)
       ws.disconnect()
       addLog("response", cfg.sessionId, result as Record<string, unknown>)
-      const responseText = result.response || result.error || "No response received."
+      const rawResponseText = result.response || result.error || "No response received."
+      const responseText = extractAndPersistValidation(rawResponseText)
       const parsed = tryParseLyzrResponse(responseText)
       if (parsed) {
         addComponent("bot", <LyzrResponseCard data={parsed} />)
-      } else {
+      } else if (responseText) {
         const jsonObj = tryExtractJson(responseText)
         if (jsonObj) {
           addComponent("bot", <JsonResponseCard data={jsonObj} />)
@@ -962,11 +989,12 @@ export function ChatModal({
       )
       ws.disconnect()
       addLog("response", cfg.sessionId, result as Record<string, unknown>)
-      const responseText = result.response || result.error || "No response received."
+      const rawResponseText = result.response || result.error || "No response received."
+      const responseText = extractAndPersistValidation(rawResponseText)
       const parsed = tryParseLyzrResponse(responseText)
       if (parsed) {
         addComponent("bot", <LyzrResponseCard data={parsed} />)
-      } else {
+      } else if (responseText) {
         const jsonObj = tryExtractJson(responseText)
         if (jsonObj) {
           addComponent("bot", <ImageAnalysisCard data={jsonObj} />)

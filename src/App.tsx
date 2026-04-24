@@ -10,6 +10,7 @@ import { OcrTestDialog } from "@/components/support/OcrTestDialog"
 import { ValidatorTestDialog } from "@/components/support/ValidatorTestDialog"
 import { useLyzrConfig } from "@/data/lyzr-config"
 import { type LogEntry, type WsEventRow, persistLog, loadLogs, deleteLogsBySession, deleteAllLogs, persistWsEvent, loadWsEvents, deleteWsEventsBySession } from "@/data/agent-logs"
+import { type ValidationResultRow, loadValidationResults, deleteValidationResultsBySession, deleteAllValidationResults } from "@/data/validation-results"
 import type { AppView, ChatStep } from "@/data/app-state"
 
 export default function App() {
@@ -24,11 +25,13 @@ export default function App() {
   const [validatorTestOpen, setValidatorTestOpen] = useState(false)
   const [agentLogs, setAgentLogs] = useState<LogEntry[]>([])
   const [wsEvents, setWsEvents] = useState<WsEventRow[]>([])
+  const [validationResults, setValidationResults] = useState<ValidationResultRow[]>([])
   const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured, resetSession: resetLyzrSession } = useLyzrConfig()
 
   useEffect(() => {
     loadLogs().then(setAgentLogs)
     loadWsEvents().then(setWsEvents)
+    loadValidationResults().then(setValidationResults)
   }, [])
 
   const addLog = useCallback((log: LogEntry) => {
@@ -36,9 +39,15 @@ export default function App() {
     persistLog(log)
   }, [])
 
+  const addValidationResult = useCallback((result: ValidationResultRow) => {
+    setValidationResults((prev) => [result, ...prev])
+  }, [])
+
   const clearLogs = useCallback(() => {
     setAgentLogs([])
     deleteAllLogs()
+    setValidationResults([])
+    deleteAllValidationResults()
   }, [])
 
   const deleteSession = useCallback((sessionId: string) => {
@@ -46,6 +55,11 @@ export default function App() {
     setWsEvents((prev) => prev.filter((e) => e.sessionId !== sessionId))
     deleteLogsBySession(sessionId)
     deleteWsEventsBySession(sessionId)
+  }, [])
+
+  const deleteValidationSession = useCallback((sessionId: string) => {
+    setValidationResults((prev) => prev.filter((r) => r.sessionId !== sessionId))
+    deleteValidationResultsBySession(sessionId)
   }, [])
 
   const handleRawWsEvent = useCallback((event: { sessionId: string; payload: Record<string, unknown>; eventType: string; level: string; agentName: string }) => {
@@ -126,6 +140,7 @@ export default function App() {
             onResetSession={resetLyzrSession}
             onAddLog={addLog}
             onRawWsEvent={handleRawWsEvent}
+            onValidationResult={addValidationResult}
           />
         </>
       ) : (
@@ -139,9 +154,11 @@ export default function App() {
         open={logsOpen}
         logs={agentLogs}
         wsEvents={wsEvents}
+        validationResults={validationResults}
         onClose={() => setLogsOpen(false)}
         onClear={clearLogs}
         onDeleteSession={deleteSession}
+        onDeleteValidationSession={deleteValidationSession}
       />
       <OcrTestDialog
         open={ocrTestOpen}

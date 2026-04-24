@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react"
-import { X, Search, Copy, Check, ChevronDown, ChevronUp, ScrollText, Trash2, ListFilter as Filter, ArrowUpRight, ArrowDownLeft, Radio, Globe } from "lucide-react"
+import { X, Search, Copy, Check, ChevronDown, ChevronUp, ScrollText, Trash2, ListFilter as Filter, ArrowUpRight, ArrowDownLeft, Radio, Globe, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { LogEntry, AgentSource } from "@/data/agent-logs"
 import type { WsEventRow } from "@/data/agent-logs"
+import type { ValidationResultRow } from "@/data/validation-results"
+import { ValidationReportCard } from "./ValidationReportCard"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,12 +26,14 @@ interface LogsViewerProps {
   open: boolean
   logs: LogEntry[]
   wsEvents: WsEventRow[]
+  validationResults: ValidationResultRow[]
   onClose: () => void
   onClear: () => void
   onDeleteSession: (sessionId: string) => void
+  onDeleteValidationSession?: (sessionId: string) => void
 }
 
-type Tab = "api" | "websocket"
+type Tab = "api" | "websocket" | "validation"
 
 // ---------------------------------------------------------------------------
 // Color helpers for WS events
@@ -124,7 +128,7 @@ function formatTimeInTz(isoString: string | undefined, tz: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSession }: LogsViewerProps) {
+export function LogsViewer({ open, logs, wsEvents, validationResults, onClose, onClear, onDeleteSession, onDeleteValidationSession }: LogsViewerProps) {
   const [tab, setTab] = useState<Tab>("api")
   const [searchQuery, setSearchQuery] = useState("")
   const [sessionFilter, setSessionFilter] = useState<string | null>(null)
@@ -153,13 +157,13 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
 
   const uniqueSessions = useMemo(() => {
     const sessions = new Map<string, number>()
-    const source = tab === "api" ? logs : wsEvents
+    const source = tab === "api" ? logs : tab === "websocket" ? wsEvents : validationResults
     for (const item of source) {
       const sid = "sessionId" in item ? item.sessionId : ""
       sessions.set(sid, (sessions.get(sid) || 0) + 1)
     }
     return sessions
-  }, [logs, wsEvents, tab])
+  }, [logs, wsEvents, validationResults, tab])
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
@@ -226,6 +230,35 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
     return Array.from(map.entries()).map(([sessionId, events]) => ({ sessionId, events }))
   }, [filteredWsEvents])
 
+  // --- Validation results ---
+
+  const filteredValidation = useMemo(() => {
+    return validationResults.filter((vr) => {
+      if (sessionFilter && vr.sessionId !== sessionFilter) return false
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const matchesSummary = vr.inputSummary.toLowerCase().includes(q)
+        const matchesSession = vr.sessionId.toLowerCase().includes(q)
+        const matchesStatus = vr.overallStatus.toLowerCase().includes(q)
+        const matchesChecks = vr.checks.some(
+          (c) => c.name.toLowerCase().includes(q) || c.detail.toLowerCase().includes(q)
+        )
+        if (!matchesSummary && !matchesSession && !matchesStatus && !matchesChecks) return false
+      }
+      return true
+    })
+  }, [validationResults, sessionFilter, searchQuery])
+
+  const validationSessionGroups = useMemo(() => {
+    const map = new Map<string, ValidationResultRow[]>()
+    for (const vr of filteredValidation) {
+      const arr = map.get(vr.sessionId)
+      if (arr) arr.push(vr)
+      else map.set(vr.sessionId, [vr])
+    }
+    return Array.from(map.entries()).map(([sessionId, results]) => ({ sessionId, results }))
+  }, [filteredValidation])
+
   // --- Shared actions ---
 
   function toggleSession(sid: string) {
@@ -259,9 +292,11 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
     if (tab === "api") {
       setExpandedSessions(new Set(sessionGroups.map((g) => g.sessionId)))
       setExpandedIds(new Set(filteredLogs.map((l) => l.id)))
-    } else {
+    } else if (tab === "websocket") {
       setExpandedSessions(new Set(wsSessionGroups.map((g) => g.sessionId)))
       setExpandedWsIds(new Set(filteredWsEvents.map((e) => e.id)))
+    } else {
+      setExpandedSessions(new Set(validationSessionGroups.map((g) => g.sessionId)))
     }
   }
 
@@ -296,10 +331,16 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
         entries: g.logs.map((l) => ({ timestamp: l.timestamp, direction: l.direction, data: l.data })),
       }))
       navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
-    } else {
+    } else if (tab === "websocket") {
       const payload = wsSessionGroups.map((g) => ({
         sessionId: g.sessionId,
         events: g.events.map((e) => e.payload),
+      }))
+      navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+    } else {
+      const payload = validationSessionGroups.map((g) => ({
+        sessionId: g.sessionId,
+        results: g.results.map((r) => ({ summary: r.inputSummary, status: r.overallStatus, checks: r.checks, raw: r.rawResult })),
       }))
       navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
     }
@@ -365,9 +406,9 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
 
   if (!open) return null
 
-  const totalEntries = tab === "api" ? filteredLogs.length : filteredWsEvents.length
-  const totalSessions = tab === "api" ? sessionGroups.length : wsSessionGroups.length
-  const totalRaw = tab === "api" ? logs.length : wsEvents.length
+  const totalEntries = tab === "api" ? filteredLogs.length : tab === "websocket" ? filteredWsEvents.length : filteredValidation.length
+  const totalSessions = tab === "api" ? sessionGroups.length : tab === "websocket" ? wsSessionGroups.length : validationSessionGroups.length
+  const totalRaw = tab === "api" ? logs.length : tab === "websocket" ? wsEvents.length : validationResults.length
 
   return (
     <div className="fixed inset-0 z-[100] bg-background flex flex-col">
@@ -435,6 +476,17 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
           <Radio className="h-3.5 w-3.5" />
           WebSocket Activity
           <Badge variant="outline" className="ml-1 text-[10px]">{wsEvents.length}</Badge>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setTab("validation"); setSessionFilter(null); setSearchQuery(""); setDirectionFilter("all") }}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            tab === "validation" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <ShieldCheck className="h-3.5 w-3.5" />
+          Validation Results
+          <Badge variant="outline" className="ml-1 text-[10px]">{validationResults.length}</Badge>
         </button>
       </div>
 
@@ -544,7 +596,7 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
             logsEndRef={logsEndRef}
             fmtTime={fmtTime}
           />
-        ) : (
+        ) : tab === "websocket" ? (
           <WsEventsContent
             wsSessionGroups={wsSessionGroups}
             wsEvents={wsEvents}
@@ -561,6 +613,21 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
             setSearchQuery={setSearchQuery}
             setSessionFilter={setSessionFilter}
             SyntaxJson={SyntaxJson}
+            logsEndRef={logsEndRef}
+            fmtTime={fmtTime}
+          />
+        ) : (
+          <ValidationContent
+            validationSessionGroups={validationSessionGroups}
+            validationResults={validationResults}
+            filteredValidation={filteredValidation}
+            expandedSessions={expandedSessions}
+            copiedSession={copiedSession}
+            toggleSession={toggleSession}
+            copySessionId={copySessionId}
+            onDeleteSession={onDeleteValidationSession || onDeleteSession}
+            setSearchQuery={setSearchQuery}
+            setSessionFilter={setSessionFilter}
             logsEndRef={logsEndRef}
             fmtTime={fmtTime}
           />
@@ -859,6 +926,129 @@ function WsEventsContent({
                       </div>
                     )
                   })}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+      <div ref={logsEndRef} />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Validation results content
+// ---------------------------------------------------------------------------
+
+function ValidationContent({
+  validationSessionGroups, validationResults, filteredValidation, expandedSessions, copiedSession,
+  toggleSession, copySessionId, onDeleteSession,
+  setSearchQuery, setSessionFilter, logsEndRef, fmtTime,
+}: {
+  validationSessionGroups: { sessionId: string; results: ValidationResultRow[] }[]
+  validationResults: ValidationResultRow[]
+  filteredValidation: ValidationResultRow[]
+  expandedSessions: Set<string>
+  copiedSession: string | null
+  toggleSession: (sid: string) => void
+  copySessionId: (sid: string) => void
+  onDeleteSession: (sid: string) => void
+  setSearchQuery: (q: string) => void
+  setSessionFilter: (s: string | null) => void
+  logsEndRef: React.RefObject<HTMLDivElement | null>
+  fmtTime: (iso: string | undefined) => string
+}) {
+  if (validationSessionGroups.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+        <ShieldCheck className="h-12 w-12" />
+        {validationResults.length === 0 ? (
+          <>
+            <p className="text-base font-medium">No validation results yet</p>
+            <p className="text-sm">Validation reports will appear here as the agent processes requests.</p>
+          </>
+        ) : (
+          <>
+            <p className="text-base font-medium">No matching results</p>
+            <p className="text-sm">Try adjusting your search or filters.</p>
+            <Button variant="outline" size="sm" onClick={() => { setSearchQuery(""); setSessionFilter(null) }}>
+              Clear Filters
+            </Button>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-4 space-y-4">
+      {validationSessionGroups.map((group) => {
+        const isSessionOpen = expandedSessions.has(group.sessionId)
+        const statusCounts = { approved: 0, flagged: 0, rejected: 0 }
+        for (const r of group.results) {
+          if (r.overallStatus in statusCounts) statusCounts[r.overallStatus as keyof typeof statusCounts]++
+        }
+        return (
+          <div key={group.sessionId} className="rounded-xl border border-border bg-card overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSession(group.sessionId)}
+              className="w-full flex items-center gap-3 px-5 py-3.5 text-left cursor-pointer hover:bg-muted/50 transition-colors"
+            >
+              {isSessionOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
+              <div className="flex flex-col gap-1 flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Session</span>
+                  <code className="text-xs font-mono font-semibold text-foreground truncate">{group.sessionId}</code>
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border bg-teal-50 text-teal-800 border-teal-300">
+                    Validator Agent
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {fmtTime(group.results[0]?.createdAt)}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {statusCounts.approved > 0 && (
+                  <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">
+                    {statusCounts.approved} approved
+                  </Badge>
+                )}
+                {statusCounts.flagged > 0 && (
+                  <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                    {statusCounts.flagged} flagged
+                  </Badge>
+                )}
+                {statusCounts.rejected > 0 && (
+                  <Badge variant="outline" className="text-[10px] bg-red-50 text-red-700 border-red-200">
+                    {statusCounts.rejected} rejected
+                  </Badge>
+                )}
+                <Badge variant="outline" className="text-[10px] shrink-0">
+                  <ShieldCheck className="h-2.5 w-2.5 mr-1" />
+                  {group.results.length} {group.results.length === 1 ? "result" : "results"}
+                </Badge>
+              </div>
+            </button>
+
+            {isSessionOpen && (
+              <div className="border-t border-border">
+                <div className="flex items-center gap-2 px-5 py-2 bg-muted/30 border-b border-border">
+                  <code className="text-[11px] font-mono text-muted-foreground select-all flex-1 truncate">{group.sessionId}</code>
+                  <button type="button" onClick={() => copySessionId(group.sessionId)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                    {copiedSession === group.sessionId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {copiedSession === group.sessionId ? "Copied" : "Copy ID"}
+                  </button>
+                  <span className="w-px h-4 bg-border" />
+                  <button type="button" onClick={() => onDeleteSession(group.sessionId)} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors cursor-pointer">
+                    <Trash2 className="h-3 w-3" />Delete Session
+                  </button>
+                </div>
+                <div className="p-4 space-y-3">
+                  {group.results.map((result) => (
+                    <ValidationReportCard key={result.id} result={result} formatTime={fmtTime} />
+                  ))}
                 </div>
               </div>
             )}
