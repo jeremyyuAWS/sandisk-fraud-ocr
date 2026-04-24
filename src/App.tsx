@@ -6,6 +6,7 @@ import { ChatLauncher } from "@/components/chat/ChatLauncher"
 import { ChatModal } from "@/components/chat/ChatModal"
 import { ScenarioSwitcherPanel } from "@/components/support/ScenarioSwitcher"
 import { LogsViewer } from "@/components/logs/LogsViewer"
+import { OcrTestDialog } from "@/components/support/OcrTestDialog"
 import { useLyzrConfig } from "@/data/lyzr-config"
 import { type LogEntry, type WsEventRow, persistLog, loadLogs, deleteLogsBySession, deleteAllLogs, persistWsEvent, loadWsEvents, deleteWsEventsBySession } from "@/data/agent-logs"
 import type { AppView, ChatStep } from "@/data/app-state"
@@ -18,6 +19,7 @@ export default function App() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
+  const [ocrTestOpen, setOcrTestOpen] = useState(false)
   const [agentLogs, setAgentLogs] = useState<LogEntry[]>([])
   const [wsEvents, setWsEvents] = useState<WsEventRow[]>([])
   const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured, resetSession: resetLyzrSession } = useLyzrConfig()
@@ -104,6 +106,7 @@ export default function App() {
             onSettingsToggle={() => setSettingsOpen((v) => !v)}
             logCount={agentLogs.length}
             onLogsOpen={() => setLogsOpen(true)}
+            onOcrTestOpen={() => setOcrTestOpen(true)}
           />
           {!chatOpen && <ChatLauncher onClick={openChat} />}
           <ChatModal
@@ -135,6 +138,10 @@ export default function App() {
         onClose={() => setLogsOpen(false)}
         onClear={clearLogs}
         onDeleteSession={deleteSession}
+      />
+      <OcrTestDialog
+        open={ocrTestOpen}
+        onOpenChange={setOcrTestOpen}
       />
     </>
   )

@@ -19,12 +19,13 @@ interface SupportPageProps {
   onSettingsToggle?: () => void
   logCount?: number
   onLogsOpen?: () => void
+  onOcrTestOpen?: () => void
 }
 
-export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle, logCount, onLogsOpen }: SupportPageProps) {
+export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle, logCount, onLogsOpen, onOcrTestOpen }: SupportPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <Header settingsPanel={settingsPanel} settingsOpen={settingsOpen} onSettingsToggle={onSettingsToggle} logCount={logCount} onLogsOpen={onLogsOpen} />
+      <Header settingsPanel={settingsPanel} settingsOpen={settingsOpen} onSettingsToggle={onSettingsToggle} logCount={logCount} onLogsOpen={onLogsOpen} onOcrTestOpen={onOcrTestOpen} />
       <HeroBanner />
       <SupportCategories />
       <section className="py-12 px-8 max-w-5xl mx-auto">

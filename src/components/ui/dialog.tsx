@@ -83,9 +83,10 @@ function DialogContent({
 
   return (
     <>
-      <DialogOverlay onClick={() => onOpenChange(false)} />
+      <DialogOverlay onMouseDown={() => onOpenChange(false)} />
       <div
         data-slot="dialog-content"
+        onMouseDown={(e) => e.stopPropagation()}
         className={cn(
           "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg sm:max-w-lg",
           className
