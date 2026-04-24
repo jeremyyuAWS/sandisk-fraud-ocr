@@ -16,47 +16,34 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
   });
 }
 
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryStr = atob(base64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  return bytes;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const contentType = req.headers.get("content-type") || "";
-    let apiKey = "";
-    let agentId = "";
-    let userId = "";
-    let sessionId = "";
-    let message = "";
-    let imageBytes: Uint8Array | null = null;
-    let imageName = "upload.jpg";
-    let imageMime = "image/jpeg";
-
-    if (contentType.includes("multipart/form-data")) {
-      const form = await req.formData();
-      apiKey = (form.get("apiKey") as string) || "";
-      agentId = (form.get("agentId") as string) || "";
-      userId = (form.get("userId") as string) || "";
-      sessionId = (form.get("sessionId") as string) || "";
-      message = (form.get("message") as string) || "";
-
-      const file = form.get("imageFile");
-      if (file instanceof File) {
-        imageBytes = new Uint8Array(await file.arrayBuffer());
-        imageName = file.name || "upload.jpg";
-        imageMime = file.type || "image/jpeg";
-      }
-    } else {
-      const body = await req.json();
-      apiKey = body.apiKey || "";
-      agentId = body.agentId || "";
-      userId = body.userId || "";
-      sessionId = body.sessionId || "";
-      message = body.message || "";
-    }
+    const body = await req.json();
+    const apiKey: string = body.apiKey || "";
+    const agentId: string = body.agentId || "";
+    const userId: string = body.userId || "";
+    const sessionId: string = body.sessionId || "";
+    const message: string = body.message || "";
+    const imageBase64: string = body.imageBase64 || "";
 
     if (!apiKey || !agentId || !userId) {
-      return jsonResponse({ error: "Missing required fields: apiKey, agentId, userId" }, 400);
+      return jsonResponse(
+        { error: "Missing required fields: apiKey, agentId, userId" },
+        400
+      );
     }
 
     const effectiveSessionId =
@@ -67,16 +54,18 @@ Deno.serve(async (req: Request) => {
 
     let lyzrResponse: Response;
 
-    if (imageBytes) {
-      const blob = new Blob([imageBytes], { type: imageMime });
+    if (imageBase64) {
+      const bytes = base64ToUint8Array(imageBase64);
+      const blob = new Blob([bytes], { type: "image/jpeg" });
+
+      console.log("Image size:", bytes.length, "bytes");
+
       const lyzrForm = new FormData();
       lyzrForm.append("user_id", userId);
       lyzrForm.append("agent_id", agentId);
       lyzrForm.append("session_id", effectiveSessionId);
       lyzrForm.append("message", message);
-      lyzrForm.append("file", blob, imageName);
-
-      console.log("Sending image to Lyzr:", imageName, imageBytes.length, "bytes");
+      lyzrForm.append("file", blob, "product-image.jpg");
 
       lyzrResponse = await fetch(LYZR_CHAT_URL, {
         method: "POST",
@@ -104,11 +93,12 @@ Deno.serve(async (req: Request) => {
     clearTimeout(timeout);
 
     const responseText = await lyzrResponse.text();
+    console.log("Lyzr status:", lyzrResponse.status, "body:", responseText.slice(0, 300));
+
     let data: Record<string, unknown>;
     try {
       data = JSON.parse(responseText);
     } catch {
-      console.error("Lyzr returned non-JSON:", responseText.slice(0, 500));
       data = { response: responseText };
     }
 

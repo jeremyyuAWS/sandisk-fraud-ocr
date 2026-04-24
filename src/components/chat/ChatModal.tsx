@@ -321,24 +321,22 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 async function sendToLyzr(
   config: LyzrAgentConfig,
   message: string,
-  imageFile?: File
+  imageBase64?: string
 ): Promise<{ response?: string; error?: string; session_id?: string }> {
-  const form = new FormData()
-  form.append("apiKey", config.apiKey)
-  form.append("agentId", config.agentId)
-  form.append("userId", config.userId)
-  form.append("sessionId", config.sessionId)
-  form.append("message", message)
-  if (imageFile) {
-    form.append("imageFile", imageFile, imageFile.name)
-  }
-
   const res = await fetch(`${SUPABASE_URL}/functions/v1/lyzr-chat`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
     },
-    body: form,
+    body: JSON.stringify({
+      apiKey: config.apiKey,
+      agentId: config.agentId,
+      userId: config.userId,
+      sessionId: config.sessionId,
+      message,
+      ...(imageBase64 ? { imageBase64 } : {}),
+    }),
   })
   const text = await res.text()
   try {
@@ -348,10 +346,11 @@ async function sendToLyzr(
   }
 }
 
-function compressImage(file: File, maxWidth = 1024, quality = 0.8): Promise<File> {
+function compressImage(file: File, maxWidth = 800, quality = 0.7): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
+      URL.revokeObjectURL(img.src)
       let { width, height } = img
       if (width > maxWidth) {
         height = Math.round((height * maxWidth) / width)
@@ -362,14 +361,8 @@ function compressImage(file: File, maxWidth = 1024, quality = 0.8): Promise<File
       canvas.height = height
       const ctx = canvas.getContext("2d")!
       ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) return reject(new Error("Compression failed"))
-          resolve(new File([blob], file.name, { type: "image/jpeg" }))
-        },
-        "image/jpeg",
-        quality
-      )
+      const dataUrl = canvas.toDataURL("image/jpeg", quality)
+      resolve(dataUrl.split(",")[1])
     }
     img.onerror = reject
     img.src = URL.createObjectURL(file)
