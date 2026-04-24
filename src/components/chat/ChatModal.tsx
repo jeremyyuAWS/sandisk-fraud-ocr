@@ -340,7 +340,12 @@ async function sendToLyzr(
     },
     body: form,
   })
-  return res.json()
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { error: text || `Request failed with status ${res.status}` }
+  }
 }
 
 function compressImage(file: File, maxWidth = 1024, quality = 0.8): Promise<File> {
