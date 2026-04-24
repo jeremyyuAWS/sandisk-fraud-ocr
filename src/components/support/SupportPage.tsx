@@ -20,12 +20,13 @@ interface SupportPageProps {
   logCount?: number
   onLogsOpen?: () => void
   onOcrTestOpen?: () => void
+  onValidatorTestOpen?: () => void
 }
 
-export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle, logCount, onLogsOpen, onOcrTestOpen }: SupportPageProps) {
+export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle, logCount, onLogsOpen, onOcrTestOpen, onValidatorTestOpen }: SupportPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <Header settingsPanel={settingsPanel} settingsOpen={settingsOpen} onSettingsToggle={onSettingsToggle} logCount={logCount} onLogsOpen={onLogsOpen} onOcrTestOpen={onOcrTestOpen} />
+      <Header settingsPanel={settingsPanel} settingsOpen={settingsOpen} onSettingsToggle={onSettingsToggle} logCount={logCount} onLogsOpen={onLogsOpen} onOcrTestOpen={onOcrTestOpen} onValidatorTestOpen={onValidatorTestOpen} />
       <HeroBanner />
       <SupportCategories />
       <section className="py-12 px-8 max-w-5xl mx-auto">

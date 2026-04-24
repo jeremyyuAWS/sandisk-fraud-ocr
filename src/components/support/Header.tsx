@@ -1,4 +1,4 @@
-import { Search, ShoppingCart, User, Settings, ScrollText, ScanSearch } from "lucide-react"
+import { Search, ShoppingCart, User, Settings, ScrollText, ScanSearch, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
@@ -20,9 +20,10 @@ interface HeaderProps {
   logCount?: number
   onLogsOpen?: () => void
   onOcrTestOpen?: () => void
+  onValidatorTestOpen?: () => void
 }
 
-export function Header({ settingsPanel, settingsOpen, onSettingsToggle, logCount = 0, onLogsOpen, onOcrTestOpen }: HeaderProps) {
+export function Header({ settingsPanel, settingsOpen, onSettingsToggle, logCount = 0, onLogsOpen, onOcrTestOpen, onValidatorTestOpen }: HeaderProps) {
   return (
     <header className="w-full">
       <div className="bg-foreground text-primary-foreground px-6 py-1.5 text-xs flex items-center justify-between">
@@ -113,6 +114,14 @@ export function Header({ settingsPanel, settingsOpen, onSettingsToggle, logCount
             title="OCR Agent Test"
           >
             <ScanSearch className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onValidatorTestOpen}
+            title="Validator Agent Test"
+          >
+            <ShieldCheck className="h-5 w-5" />
           </Button>
           <div className="relative">
             <Button

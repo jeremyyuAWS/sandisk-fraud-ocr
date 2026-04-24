@@ -7,6 +7,7 @@ import { ChatModal } from "@/components/chat/ChatModal"
 import { ScenarioSwitcherPanel } from "@/components/support/ScenarioSwitcher"
 import { LogsViewer } from "@/components/logs/LogsViewer"
 import { OcrTestDialog } from "@/components/support/OcrTestDialog"
+import { ValidatorTestDialog } from "@/components/support/ValidatorTestDialog"
 import { useLyzrConfig } from "@/data/lyzr-config"
 import { type LogEntry, type WsEventRow, persistLog, loadLogs, deleteLogsBySession, deleteAllLogs, persistWsEvent, loadWsEvents, deleteWsEventsBySession } from "@/data/agent-logs"
 import type { AppView, ChatStep } from "@/data/app-state"
@@ -20,6 +21,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [logsOpen, setLogsOpen] = useState(false)
   const [ocrTestOpen, setOcrTestOpen] = useState(false)
+  const [validatorTestOpen, setValidatorTestOpen] = useState(false)
   const [agentLogs, setAgentLogs] = useState<LogEntry[]>([])
   const [wsEvents, setWsEvents] = useState<WsEventRow[]>([])
   const { config: lyzrConfig, setConfig: setLyzrConfig, isConfigured: isLyzrConfigured, resetSession: resetLyzrSession } = useLyzrConfig()
@@ -107,6 +109,7 @@ export default function App() {
             logCount={agentLogs.length}
             onLogsOpen={() => setLogsOpen(true)}
             onOcrTestOpen={() => setOcrTestOpen(true)}
+            onValidatorTestOpen={() => setValidatorTestOpen(true)}
           />
           {!chatOpen && <ChatLauncher onClick={openChat} />}
           <ChatModal
@@ -142,6 +145,11 @@ export default function App() {
       <OcrTestDialog
         open={ocrTestOpen}
         onOpenChange={setOcrTestOpen}
+        onAddLog={addLog}
+      />
+      <ValidatorTestDialog
+        open={validatorTestOpen}
+        onOpenChange={setValidatorTestOpen}
         onAddLog={addLog}
       />
     </>
