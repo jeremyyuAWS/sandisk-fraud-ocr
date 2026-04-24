@@ -16,28 +16,16 @@ interface LyzrRequest {
   imageBase64?: string;
 }
 
-function base64ToBlob(dataUrl: string): { blob: Blob; filename: string } {
+const LYZR_CHAT_URL = "https://agent-prod.studio.lyzr.ai/v3/inference/chat/";
+
+function stripDataUrlPrefix(dataUrl: string): string {
   const commaIdx = dataUrl.indexOf(",");
-  if (commaIdx === -1) {
-    throw new Error("Invalid data URL: no comma separator");
-  }
+  return commaIdx !== -1 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+}
 
-  const meta = dataUrl.slice(0, commaIdx);
-  const b64 = dataUrl.slice(commaIdx + 1);
-
-  const mimeMatch = meta.match(/data:(image\/([a-zA-Z0-9.+-]+))/);
-  const mimeType = mimeMatch?.[1] ?? "image/png";
-  const ext = mimeMatch?.[2] ?? "png";
-
-  const raw = atob(b64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) {
-    bytes[i] = raw.charCodeAt(i);
-  }
-  return {
-    blob: new Blob([bytes], { type: mimeType }),
-    filename: `upload.${ext === "jpeg" ? "jpg" : ext}`,
-  };
+function getMimeType(dataUrl: string): string {
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+)/);
+  return match?.[1] ?? "image/png";
 }
 
 Deno.serve(async (req: Request) => {
@@ -49,8 +37,8 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { apiKey, agentId, userId, sessionId, message, imageBase64 }: LyzrRequest =
-      await req.json();
+    const body: LyzrRequest = await req.json();
+    const { apiKey, agentId, userId, sessionId, message, imageBase64 } = body;
 
     if (!apiKey || !agentId || !userId) {
       return new Response(
@@ -71,7 +59,18 @@ Deno.serve(async (req: Request) => {
     let lyzrResponse: Response;
 
     if (imageBase64) {
-      const { blob, filename } = base64ToBlob(imageBase64);
+      const rawBase64 = stripDataUrlPrefix(imageBase64);
+      const mimeType = getMimeType(imageBase64);
+      const ext = mimeType.split("/")[1] || "png";
+      const filename = `upload.${ext === "jpeg" ? "jpg" : ext}`;
+
+      const binaryStr = atob(rawBase64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: mimeType });
+
       const form = new FormData();
       form.append("user_id", userId);
       form.append("agent_id", agentId);
@@ -79,21 +78,18 @@ Deno.serve(async (req: Request) => {
       form.append("message", message);
       form.append("file", blob, filename);
 
-      lyzrResponse = await fetch(
-        "https://agent-prod.studio.lyzr.ai/v3/inference/chat/",
-        {
-          method: "POST",
-          headers: {
-            "x-api-key": apiKey,
-          },
-          body: form,
-          signal: controller.signal,
-        }
-      );
-    } else {
-      lyzrResponse = await fetch(
-        "https://agent-prod.studio.lyzr.ai/v3/inference/chat/",
-        {
+      lyzrResponse = await fetch(LYZR_CHAT_URL, {
+        method: "POST",
+        headers: { "x-api-key": apiKey },
+        body: form,
+        signal: controller.signal,
+      });
+
+      if (!lyzrResponse.ok) {
+        const formErrorText = await lyzrResponse.text().catch(() => "");
+        console.error("FormData upload failed, status:", lyzrResponse.status, formErrorText);
+
+        lyzrResponse = await fetch(LYZR_CHAT_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -103,11 +99,27 @@ Deno.serve(async (req: Request) => {
             user_id: userId,
             agent_id: agentId,
             session_id: effectiveSessionId,
-            message,
+            message: message + "\n\n[Image attached as base64]",
+            file: imageBase64,
           }),
           signal: controller.signal,
-        }
-      );
+        });
+      }
+    } else {
+      lyzrResponse = await fetch(LYZR_CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          agent_id: agentId,
+          session_id: effectiveSessionId,
+          message,
+        }),
+        signal: controller.signal,
+      });
     }
 
     clearTimeout(timeout);
@@ -120,13 +132,14 @@ Deno.serve(async (req: Request) => {
         session_id: effectiveSessionId,
       }),
       {
-        status: lyzrResponse.status,
+        status: lyzrResponse.ok ? 200 : lyzrResponse.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
+    console.error("Edge function error:", errorMessage);
     return new Response(
       JSON.stringify({ error: errorMessage }),
       {
