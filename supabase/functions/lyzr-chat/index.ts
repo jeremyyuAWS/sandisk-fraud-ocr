@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const LYZR_CHAT_URL = "https://agent-prod.studio.lyzr.ai/v3/inference/chat/";
+const LYZR_FILE_URL = "https://agent-prod.studio.lyzr.ai/v3/inference/chat/file";
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -67,7 +68,7 @@ Deno.serve(async (req: Request) => {
       lyzrForm.append("message", message);
       lyzrForm.append("file", blob, "product-image.jpg");
 
-      lyzrResponse = await fetch(LYZR_CHAT_URL, {
+      lyzrResponse = await fetch(LYZR_FILE_URL, {
         method: "POST",
         headers: { "x-api-key": apiKey },
         body: lyzrForm,
