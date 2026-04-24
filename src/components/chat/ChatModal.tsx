@@ -16,6 +16,8 @@ import { LyzrResponseCard, tryParseLyzrResponse } from "./LyzrResponseCard"
 import { AgentActivityFeed } from "./AgentActivityFeed"
 import { useLyzrWebSocket, type RawWsEvent } from "@/hooks/useLyzrWebSocket"
 import { parseValidationFromResponse, normalizeChecks, persistValidationResult, type ValidationResultRow } from "@/data/validation-results"
+import { runVerificationWorkflow, runOfflineVerification, type WorkflowProgress, type WorkflowResult } from "@/data/workflow"
+import { WorkflowProgressBar, ValidationDashboard } from "./ValidationDashboard"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -694,15 +696,26 @@ export function ChatModal({
   useEffect(() => {
     if (step === "ocr-result" && !ocrResultHandled.current) {
       ocrResultHandled.current = true
-      const resultText =
-        scenario.risk.level === "Low"
-          ? "Your product has been verified as genuine. All product details match the information on file."
-          : scenario.risk.level === "High"
-            ? "We were unable to confidently verify this product. Some product details do not match the information provided. A support specialist can review this case with you."
-            : "The uploaded image could not be fully analyzed. We recommend uploading a clearer image or speaking with a support specialist."
+      const offlineResult = runOfflineVerification(scenario)
+      if (offlineResult.validationRow) {
+        onValidationResult?.(offlineResult.validationRow)
+      }
+      const resultText = offlineResult.managerSummary || ""
       setMessages((prev) => [
         ...prev,
-        { from: "bot", component: <OcrResultCard scenario={scenario} />, timestamp: now() },
+        {
+          from: "bot",
+          component: offlineResult.validatorOutput ? (
+            <ValidationDashboard
+              ocrOutput={offlineResult.ocrOutput}
+              validatorOutput={offlineResult.validatorOutput}
+              productName={scenario.warranty.product}
+            />
+          ) : (
+            <OcrResultCard scenario={scenario} />
+          ),
+          timestamp: now(),
+        },
         { from: "bot", text: resultText, timestamp: now() },
       ])
       onStepChange("escalation")
@@ -731,7 +744,15 @@ export function ChatModal({
   useEffect(() => {
     if (step === "return-result" && !returnResultHandled.current) {
       returnResultHandled.current = true
-      const result = evaluateReturnFraud(
+
+      // App-driven: run offline verification for the return scenario
+      const offlineResult = runOfflineVerification(scenario)
+      if (offlineResult.validationRow) {
+        onValidationResult?.(offlineResult.validationRow)
+      }
+
+      // Also run the legacy fraud check for return-specific context
+      const fraudResult = evaluateReturnFraud(
         selectedScenario,
         returnOver30,
         returnEmail,
@@ -741,20 +762,32 @@ export function ChatModal({
       )
 
       const summary =
-        result.riskLevel === "Low"
+        fraudResult.riskLevel === "Low"
           ? "Your return has been approved. You will receive a return shipping label via email shortly."
-          : result.riskLevel === "High"
+          : fraudResult.riskLevel === "High"
             ? "We were unable to process your return automatically. This case has been flagged for review by our support team."
             : "We need a bit more information before we can process your return. A support specialist may reach out."
 
       setMessages((prev) => [
         ...prev,
-        { from: "bot", component: <ReturnFraudCard result={result} />, timestamp: now() },
+        {
+          from: "bot",
+          component: offlineResult.validatorOutput ? (
+            <ValidationDashboard
+              ocrOutput={offlineResult.ocrOutput}
+              validatorOutput={offlineResult.validatorOutput}
+              productName={scenario.warranty.product}
+            />
+          ) : (
+            <ReturnFraudCard result={fraudResult} />
+          ),
+          timestamp: now(),
+        },
         { from: "bot", text: summary, timestamp: now() },
       ])
       onStepChange("escalation")
     }
-  }, [step, selectedScenario, returnOver30, returnEmail, returnOrder, returnReason, returnImageUrl, onStepChange])
+  }, [step, selectedScenario, returnOver30, returnEmail, returnOrder, returnReason, returnImageUrl, onStepChange, scenario])
 
   // Helpers
   function addMsg(from: "bot" | "user", text: string) {
@@ -970,42 +1003,58 @@ export function ChatModal({
     onImageUploaded?.(objectUrl)
     addComponent("user", <ImagePreview src={objectUrl} alt="Uploaded product" />)
     setIsSending(true)
-    ws.connect(cfg.sessionId, cfg.apiKey)
-    addLog("request", cfg.sessionId, {
-      agentId: cfg.agentId,
-      userId: cfg.userId,
-      sessionId: cfg.sessionId,
-      message: "Here is the product image for verification.",
-      hasImage: true,
-      fileName: file.name,
-      fileSize: file.size,
-    })
+
     try {
       const compressed = await compressImage(file)
-      const result = await sendToLyzr(
-        cfg,
-        "Here is the product image for verification.",
-        compressed
-      )
-      ws.disconnect()
-      addLog("response", cfg.sessionId, result as Record<string, unknown>)
-      const rawResponseText = result.response || result.error || "No response received."
-      const responseText = extractAndPersistValidation(rawResponseText)
-      const parsed = tryParseLyzrResponse(responseText)
-      if (parsed) {
-        addComponent("bot", <LyzrResponseCard data={parsed} />)
-      } else if (responseText) {
-        const jsonObj = tryExtractJson(responseText)
-        if (jsonObj) {
-          addComponent("bot", <ImageAnalysisCard data={jsonObj} />)
-        } else {
-          addComponent("bot", <ImageAnalysisTextCard text={responseText} />)
-        }
+
+      // App-driven orchestration: OCR -> Validator -> Dashboard -> Manager summary
+      let currentProgress: WorkflowProgress = { phase: "order-lookup", detail: "Starting..." }
+      const progressKey = Date.now()
+
+      const updateProgress = (p: WorkflowProgress) => {
+        currentProgress = p
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.timestamp === `progress-${progressKey}`)
+          if (idx === -1) {
+            return [...prev, { from: "bot" as const, component: <WorkflowProgressBar progress={p} />, timestamp: `progress-${progressKey}` }]
+          }
+          const copy = [...prev]
+          copy[idx] = { from: "bot" as const, component: <WorkflowProgressBar progress={p} />, timestamp: `progress-${progressKey}` }
+          return copy
+        })
+      }
+
+      updateProgress({ phase: "order-lookup", detail: "Looking up order..." })
+
+      const result = await runVerificationWorkflow({
+        config: cfg,
+        imageBase64: compressed,
+        scenario,
+        addLog: onAddLog,
+        onProgress: updateProgress,
+        onValidation: (row) => onValidationResult?.(row),
+      })
+
+      // Remove progress bar, replace with final dashboard
+      setMessages((prev) => prev.filter((m) => m.timestamp !== `progress-${progressKey}`))
+
+      if (result.validatorOutput) {
+        addComponent("bot", (
+          <ValidationDashboard
+            ocrOutput={result.ocrOutput}
+            validatorOutput={result.validatorOutput}
+            productName={scenario.warranty.product}
+          />
+        ))
+      }
+
+      if (result.managerSummary) {
+        addMsg("bot", result.managerSummary)
+      } else if (result.error) {
+        addMsg("bot", `Verification encountered an issue: ${result.error}. A support specialist can assist you.`)
       }
     } catch (err) {
-      ws.disconnect()
-      addLog("response", cfg.sessionId, { error: err instanceof Error ? err.message : "Network error" })
-      addMsg("bot", "Failed to analyze the image. Please check your Movate agent settings.")
+      addMsg("bot", "Failed to analyze the image. Please check your agent settings.")
     } finally {
       setIsSending(false)
     }
