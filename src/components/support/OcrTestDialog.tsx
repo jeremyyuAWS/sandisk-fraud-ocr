@@ -48,6 +48,7 @@ export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogPro
   const [elapsed, setElapsed] = useState(0)
   const [copied, setCopied] = useState(false)
   const [viewMode, setViewMode] = useState<"formatted" | "raw">("formatted")
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const base64Ref = useRef("")
 
@@ -61,6 +62,7 @@ export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogPro
     setElapsed(0)
     setCopied(false)
     setViewMode("formatted")
+    setUploadedImageUrl(null)
     base64Ref.current = ""
   }, [])
 
@@ -141,6 +143,7 @@ export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogPro
       }
 
       setRawResponse(JSON.stringify(data, null, 2))
+      setUploadedImageUrl(data.test_info?.image_url || null)
 
       const lyzrRaw = data.lyzr_raw_response
       if (lyzrRaw?.response) {
@@ -265,24 +268,31 @@ export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogPro
                 </>
               )}
               {state === "done" && (
-                <>
-                  <Badge variant="outline" className="text-xs border-foreground/20">
-                    {elapsed}s
-                  </Badge>
-                  <span className="text-muted-foreground">Analysis complete</span>
-                  <div className="ml-auto flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={copyJson}>
-                      {copied ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={reset}>
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    </Button>
+                <div className="flex flex-col gap-1 w-full">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs border-foreground/20">
+                      {elapsed}s
+                    </Badge>
+                    <span className="text-muted-foreground">Analysis complete</span>
+                    <div className="ml-auto flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={copyJson}>
+                        {copied ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={reset}>
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                </>
+                  {uploadedImageUrl && (
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      Analyzed: {uploadedImageUrl}
+                    </p>
+                  )}
+                </div>
               )}
               {state === "error" && (
                 <>

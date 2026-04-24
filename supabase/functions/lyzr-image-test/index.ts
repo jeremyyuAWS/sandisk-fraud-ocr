@@ -55,7 +55,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const sessionId = `${agentId}-test-${crypto.randomUUID().slice(0, 8)}`;
+    const uniqueSuffix = crypto.randomUUID().slice(0, 8);
+    const sessionId = `${agentId}-test-${uniqueSuffix}`;
+    const ephemeralUserId = `ocr-test-${uniqueSuffix}@test.local`;
 
     // Step 1: Upload image to Supabase Storage
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -83,6 +85,8 @@ Deno.serve(async (req: Request) => {
     const imageUrl = urlData.publicUrl;
 
     // Step 2: Send to Lyzr with the image URL in the message
+    // Use an ephemeral user_id so Lyzr cannot return cached results from a
+    // previous conversation tied to the real user account.
     const message = `Analyze this product image and return the result as JSON. Image URL: ${imageUrl}`;
 
     const controller = new AbortController();
@@ -95,7 +99,7 @@ Deno.serve(async (req: Request) => {
         "x-api-key": apiKey,
       },
       body: JSON.stringify({
-        user_id: userId,
+        user_id: ephemeralUserId,
         agent_id: agentId,
         session_id: sessionId,
         message,
@@ -119,6 +123,7 @@ Deno.serve(async (req: Request) => {
       test_info: {
         agent_id: agentId,
         session_id: sessionId,
+        ephemeral_user_id: ephemeralUserId,
         image_url: imageUrl,
         image_size_bytes: bytes.length,
         lyzr_status: lyzrResponse.status,
