@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react"
-import { ScanSearch, Upload, Loader as Loader2, X, Copy, Check, RotateCcw } from "lucide-react"
+import { ScanSearch, Upload, Loader as Loader2, X, Copy, Check, RotateCcw, Code, Eye } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { createLogEntry, type LogEntry } from "@/data/agent-logs"
 
 const OCR_AGENT_ID = "69ea4e96b6a1f25b871d5302"
 const LYZR_API_KEY = "sk-default-D0plT8nq8DdRpw5LR956a7J4Df7Yo2QC"
@@ -19,6 +20,7 @@ const LYZR_USER_ID = "jeremy.yu@movate.com"
 interface OcrTestDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onAddLog?: (log: LogEntry) => void
 }
 
 type TestState = "idle" | "uploading" | "analyzing" | "done" | "error"
@@ -36,7 +38,7 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-export function OcrTestDialog({ open, onOpenChange }: OcrTestDialogProps) {
+export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogProps) {
   const [state, setState] = useState<TestState>("idle")
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState("")
@@ -45,6 +47,7 @@ export function OcrTestDialog({ open, onOpenChange }: OcrTestDialogProps) {
   const [errorMsg, setErrorMsg] = useState("")
   const [elapsed, setElapsed] = useState(0)
   const [copied, setCopied] = useState(false)
+  const [viewMode, setViewMode] = useState<"formatted" | "raw">("formatted")
   const fileRef = useRef<HTMLInputElement>(null)
   const base64Ref = useRef("")
 
@@ -57,6 +60,7 @@ export function OcrTestDialog({ open, onOpenChange }: OcrTestDialogProps) {
     setErrorMsg("")
     setElapsed(0)
     setCopied(false)
+    setViewMode("formatted")
     base64Ref.current = ""
   }, [])
 
@@ -87,10 +91,21 @@ export function OcrTestDialog({ open, onOpenChange }: OcrTestDialogProps) {
     setErrorMsg("")
     setRawResponse("")
     setParsedJson(null)
+    setViewMode("formatted")
     const start = Date.now()
+
+    const sessionId = `ocr-test-${Date.now()}`
 
     try {
       const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lyzr-image-test`
+
+      onAddLog?.(createLogEntry("request", sessionId, {
+        source: "ocr-test-dialog",
+        agent_id: OCR_AGENT_ID,
+        user_id: LYZR_USER_ID,
+        image_file: fileName,
+        endpoint: apiUrl,
+      }))
 
       setState("analyzing")
 
@@ -110,6 +125,13 @@ export function OcrTestDialog({ open, onOpenChange }: OcrTestDialogProps) {
 
       const data = await res.json()
       setElapsed(Math.round((Date.now() - start) / 1000))
+
+      onAddLog?.(createLogEntry("response", sessionId, {
+        source: "ocr-test-dialog",
+        http_status: res.status,
+        ok: res.ok,
+        body: data,
+      }))
 
       if (!res.ok) {
         setState("error")
@@ -139,7 +161,7 @@ export function OcrTestDialog({ open, onOpenChange }: OcrTestDialogProps) {
       setState("error")
       setErrorMsg(err instanceof Error ? err.message : "Network error")
     }
-  }, [])
+  }, [fileName, onAddLog])
 
   const copyJson = useCallback(() => {
     const text = parsedJson
@@ -283,17 +305,50 @@ export function OcrTestDialog({ open, onOpenChange }: OcrTestDialogProps) {
 
           {/* JSON output */}
           {(parsedJson || rawResponse) && (
-            <ScrollArea className="flex-1 min-h-0 max-h-[45vh] rounded-md border border-border bg-muted/40">
-              <div className="p-4">
-                {parsedJson ? (
-                  <JsonTree data={parsedJson} />
-                ) : (
-                  <pre className="text-xs font-mono whitespace-pre-wrap text-foreground">
-                    {rawResponse}
-                  </pre>
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Lyzr Agent Response
+                </span>
+                {parsedJson && (
+                  <div className="flex items-center gap-0.5 border border-border rounded-md p-0.5">
+                    <button
+                      onClick={() => setViewMode("formatted")}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-colors ${
+                        viewMode === "formatted"
+                          ? "bg-foreground text-background"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Eye className="h-3 w-3" />
+                      Formatted
+                    </button>
+                    <button
+                      onClick={() => setViewMode("raw")}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-colors ${
+                        viewMode === "raw"
+                          ? "bg-foreground text-background"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Code className="h-3 w-3" />
+                      Raw
+                    </button>
+                  </div>
                 )}
               </div>
-            </ScrollArea>
+              <ScrollArea className="flex-1 min-h-0 max-h-[45vh] rounded-md border border-border bg-muted/40">
+                <div className="p-4">
+                  {parsedJson && viewMode === "formatted" ? (
+                    <JsonTree data={parsedJson} />
+                  ) : (
+                    <pre className="text-xs font-mono whitespace-pre-wrap text-foreground">
+                      {rawResponse}
+                    </pre>
+                  )}
+                </div>
+              </ScrollArea>
+            </>
           )}
         </div>
       </DialogContent>

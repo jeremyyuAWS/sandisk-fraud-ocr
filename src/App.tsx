@@ -142,6 +142,7 @@ export default function App() {
       <OcrTestDialog
         open={ocrTestOpen}
         onOpenChange={setOcrTestOpen}
+        onAddLog={addLog}
       />
     </>
   )
