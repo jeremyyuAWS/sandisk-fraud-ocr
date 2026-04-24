@@ -7,47 +7,51 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-interface LyzrRequest {
-  apiKey: string;
-  agentId: string;
-  userId: string;
-  sessionId: string;
-  message: string;
-  imageBase64?: string;
-}
-
 const LYZR_CHAT_URL = "https://agent-prod.studio.lyzr.ai/v3/inference/chat/";
 
-function stripDataUrlPrefix(dataUrl: string): string {
-  const commaIdx = dataUrl.indexOf(",");
-  return commaIdx !== -1 ? dataUrl.slice(commaIdx + 1) : dataUrl;
-}
-
-function getMimeType(dataUrl: string): string {
-  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+)/);
-  return match?.[1] ?? "image/png";
+function errorResponse(message: string, status = 500) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const body: LyzrRequest = await req.json();
-    const { apiKey, agentId, userId, sessionId, message, imageBase64 } = body;
+    const contentType = req.headers.get("content-type") || "";
+    let apiKey: string;
+    let agentId: string;
+    let userId: string;
+    let sessionId: string;
+    let message: string;
+    let imageFile: File | null = null;
+
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
+      apiKey = (form.get("apiKey") as string) || "";
+      agentId = (form.get("agentId") as string) || "";
+      userId = (form.get("userId") as string) || "";
+      sessionId = (form.get("sessionId") as string) || "";
+      message = (form.get("message") as string) || "";
+      const file = form.get("imageFile");
+      if (file instanceof File) {
+        imageFile = file;
+      }
+    } else {
+      const body = await req.json();
+      apiKey = body.apiKey || "";
+      agentId = body.agentId || "";
+      userId = body.userId || "";
+      sessionId = body.sessionId || "";
+      message = body.message || "";
+    }
 
     if (!apiKey || !agentId || !userId) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: apiKey, agentId, userId" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return errorResponse("Missing required fields: apiKey, agentId, userId", 400);
     }
 
     const effectiveSessionId =
@@ -58,53 +62,20 @@ Deno.serve(async (req: Request) => {
 
     let lyzrResponse: Response;
 
-    if (imageBase64) {
-      const rawBase64 = stripDataUrlPrefix(imageBase64);
-      const mimeType = getMimeType(imageBase64);
-      const ext = mimeType.split("/")[1] || "png";
-      const filename = `upload.${ext === "jpeg" ? "jpg" : ext}`;
-
-      const binaryStr = atob(rawBase64);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: mimeType });
-
-      const form = new FormData();
-      form.append("user_id", userId);
-      form.append("agent_id", agentId);
-      form.append("session_id", effectiveSessionId);
-      form.append("message", message);
-      form.append("file", blob, filename);
+    if (imageFile) {
+      const lyzrForm = new FormData();
+      lyzrForm.append("user_id", userId);
+      lyzrForm.append("agent_id", agentId);
+      lyzrForm.append("session_id", effectiveSessionId);
+      lyzrForm.append("message", message);
+      lyzrForm.append("file", imageFile, imageFile.name);
 
       lyzrResponse = await fetch(LYZR_CHAT_URL, {
         method: "POST",
         headers: { "x-api-key": apiKey },
-        body: form,
+        body: lyzrForm,
         signal: controller.signal,
       });
-
-      if (!lyzrResponse.ok) {
-        const formErrorText = await lyzrResponse.text().catch(() => "");
-        console.error("FormData upload failed, status:", lyzrResponse.status, formErrorText);
-
-        lyzrResponse = await fetch(LYZR_CHAT_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": apiKey,
-          },
-          body: JSON.stringify({
-            user_id: userId,
-            agent_id: agentId,
-            session_id: effectiveSessionId,
-            message: message + "\n\n[Image attached as base64]",
-            file: imageBase64,
-          }),
-          signal: controller.signal,
-        });
-      }
     } else {
       lyzrResponse = await fetch(LYZR_CHAT_URL, {
         method: "POST",
@@ -127,25 +98,15 @@ Deno.serve(async (req: Request) => {
     const data = await lyzrResponse.json();
 
     return new Response(
-      JSON.stringify({
-        ...data,
-        session_id: effectiveSessionId,
-      }),
+      JSON.stringify({ ...data, session_id: effectiveSessionId }),
       {
         status: lyzrResponse.ok ? 200 : lyzrResponse.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    console.error("Edge function error:", errorMessage);
-    return new Response(
-      JSON.stringify({ error: errorMessage }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("lyzr-chat error:", msg);
+    return errorResponse(msg);
   }
 });

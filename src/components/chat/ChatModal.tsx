@@ -321,32 +321,53 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 async function sendToLyzr(
   config: LyzrAgentConfig,
   message: string,
-  imageBase64?: string
+  imageFile?: File
 ): Promise<{ response?: string; error?: string; session_id?: string }> {
+  const form = new FormData()
+  form.append("apiKey", config.apiKey)
+  form.append("agentId", config.agentId)
+  form.append("userId", config.userId)
+  form.append("sessionId", config.sessionId)
+  form.append("message", message)
+  if (imageFile) {
+    form.append("imageFile", imageFile, imageFile.name)
+  }
+
   const res = await fetch(`${SUPABASE_URL}/functions/v1/lyzr-chat`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      apiKey: config.apiKey,
-      agentId: config.agentId,
-      userId: config.userId,
-      sessionId: config.sessionId,
-      message,
-      ...(imageBase64 ? { imageBase64 } : {}),
-    }),
+    body: form,
   })
   return res.json()
 }
 
-function fileToBase64(file: File): Promise<string> {
+function compressImage(file: File, maxWidth = 1024, quality = 0.8): Promise<File> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
+    const img = new Image()
+    img.onload = () => {
+      let { width, height } = img
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width)
+        width = maxWidth
+      }
+      const canvas = document.createElement("canvas")
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext("2d")!
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return reject(new Error("Compression failed"))
+          resolve(new File([blob], file.name, { type: "image/jpeg" }))
+        },
+        "image/jpeg",
+        quality
+      )
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
   })
 }
 
@@ -935,11 +956,11 @@ export function ChatModal({
       fileSize: file.size,
     })
     try {
-      const base64 = await fileToBase64(file)
+      const compressed = await compressImage(file)
       const result = await sendToLyzr(
         cfg,
         "Here is the product image for verification.",
-        base64
+        compressed
       )
       ws.disconnect()
       addLog("response", cfg.sessionId, result as Record<string, unknown>)
