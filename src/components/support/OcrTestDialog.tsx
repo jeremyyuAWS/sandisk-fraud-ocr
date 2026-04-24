@@ -12,15 +12,13 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { createLogEntry, type LogEntry } from "@/data/agent-logs"
-
-const OCR_AGENT_ID = "69ea4e96b6a1f25b871d5302"
-const LYZR_API_KEY = "sk-default-D0plT8nq8DdRpw5LR956a7J4Df7Yo2QC"
-const LYZR_USER_ID = "jeremy.yu@movate.com"
+import type { LyzrAgentConfig } from "@/data/lyzr-config"
 
 interface OcrTestDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAddLog?: (log: LogEntry) => void
+  lyzrConfig: LyzrAgentConfig
 }
 
 type TestState = "idle" | "uploading" | "analyzing" | "done" | "error"
@@ -38,7 +36,7 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogProps) {
+export function OcrTestDialog({ open, onOpenChange, onAddLog, lyzrConfig }: OcrTestDialogProps) {
   const [state, setState] = useState<TestState>("idle")
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState("")
@@ -103,8 +101,8 @@ export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogPro
 
       onAddLog?.(createLogEntry("request", sessionId, {
         source: "ocr-test-dialog",
-        agent_id: OCR_AGENT_ID,
-        user_id: LYZR_USER_ID,
+        agent_id: lyzrConfig.ocrAgentId,
+        user_id: lyzrConfig.userId,
         image_file: fileName,
         endpoint: apiUrl,
       }, "ocr"))
@@ -118,9 +116,9 @@ export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogPro
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          apiKey: LYZR_API_KEY,
-          agentId: OCR_AGENT_ID,
-          userId: LYZR_USER_ID,
+          apiKey: lyzrConfig.apiKey,
+          agentId: lyzrConfig.ocrAgentId,
+          userId: lyzrConfig.userId,
           imageBase64: base64Ref.current,
         }),
       })

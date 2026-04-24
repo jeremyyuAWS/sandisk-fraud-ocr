@@ -13,20 +13,18 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { createLogEntry, type LogEntry } from "@/data/agent-logs"
-
-const VALIDATOR_AGENT_ID = "69ea4e968dccef41d94cc060"
-const LYZR_API_KEY = "sk-default-D0plT8nq8DdRpw5LR956a7J4Df7Yo2QC"
-const LYZR_USER_ID = "jeremy.yu@movate.com"
+import type { LyzrAgentConfig } from "@/data/lyzr-config"
 
 interface ValidatorTestDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAddLog?: (log: LogEntry) => void
+  lyzrConfig: LyzrAgentConfig
 }
 
 type TestState = "idle" | "validating" | "done" | "error"
 
-export function ValidatorTestDialog({ open, onOpenChange, onAddLog }: ValidatorTestDialogProps) {
+export function ValidatorTestDialog({ open, onOpenChange, onAddLog, lyzrConfig }: ValidatorTestDialogProps) {
   const [state, setState] = useState<TestState>("idle")
   const [jsonInput, setJsonInput] = useState("")
   const [rawResponse, setRawResponse] = useState("")
@@ -64,8 +62,8 @@ export function ValidatorTestDialog({ open, onOpenChange, onAddLog }: ValidatorT
 
       onAddLog?.(createLogEntry("request", sessionId, {
         source: "validator-test-dialog",
-        agent_id: VALIDATOR_AGENT_ID,
-        user_id: LYZR_USER_ID,
+        agent_id: lyzrConfig.validatorAgentId,
+        user_id: lyzrConfig.userId,
         payload_length: jsonInput.length,
         endpoint: apiUrl,
       }, "validator"))
@@ -77,9 +75,9 @@ export function ValidatorTestDialog({ open, onOpenChange, onAddLog }: ValidatorT
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          apiKey: LYZR_API_KEY,
-          agentId: VALIDATOR_AGENT_ID,
-          userId: LYZR_USER_ID,
+          apiKey: lyzrConfig.apiKey,
+          agentId: lyzrConfig.validatorAgentId,
+          userId: lyzrConfig.userId,
           jsonPayload: jsonInput,
         }),
       })

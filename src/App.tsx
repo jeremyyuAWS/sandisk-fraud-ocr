@@ -146,10 +146,12 @@ export default function App() {
         open={ocrTestOpen}
         onOpenChange={setOcrTestOpen}
         onAddLog={addLog}
+        lyzrConfig={lyzrConfig}
       />
       <ValidatorTestDialog
         open={validatorTestOpen}
         onOpenChange={setValidatorTestOpen}
+        lyzrConfig={lyzrConfig}
         onAddLog={addLog}
       />
     </>

@@ -86,12 +86,14 @@ function LyzrSettingsPanel({
 }) {
   const [showApiKey, setShowApiKey] = useState(false)
 
+  const allConfigured = config.enabled && config.apiKey && config.agentId && config.ocrAgentId && config.validatorAgentId && config.userId
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium">Enable Movate Agent</p>
-          <p className="text-[10px] text-muted-foreground">Power chat with a live Movate AI agent</p>
+          <p className="text-xs font-medium">Enable Movate Agents</p>
+          <p className="text-[10px] text-muted-foreground">Power chat with live Movate AI agents</p>
         </div>
         <Switch
           checked={config.enabled}
@@ -100,7 +102,10 @@ function LyzrSettingsPanel({
         />
       </div>
       <Separator />
-      <div className="space-y-2.5">
+
+      {/* Shared credentials */}
+      <div className="space-y-2">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Credentials</p>
         <div className="space-y-1">
           <Label htmlFor="lyzr-api-key" className="text-xs">API Key</Label>
           <div className="relative">
@@ -122,16 +127,6 @@ function LyzrSettingsPanel({
           </div>
         </div>
         <div className="space-y-1">
-          <Label htmlFor="lyzr-agent-id" className="text-xs">Agent ID</Label>
-          <Input
-            id="lyzr-agent-id"
-            placeholder="69ea29fa48859962fb807a69"
-            value={config.agentId}
-            onChange={(e) => onChange({ agentId: e.target.value })}
-            className="h-7 text-xs font-mono"
-          />
-        </div>
-        <div className="space-y-1">
           <Label htmlFor="lyzr-user-id" className="text-xs">User ID</Label>
           <Input
             id="lyzr-user-id"
@@ -142,12 +137,62 @@ function LyzrSettingsPanel({
           />
         </div>
       </div>
-      {config.enabled && config.apiKey && config.agentId && config.userId && (
+
+      <Separator />
+
+      {/* Agent IDs */}
+      <div className="space-y-2.5">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Agent IDs</p>
+
+        <div className="space-y-1">
+          <Label htmlFor="lyzr-manager-id" className="text-xs flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-sky-400 shrink-0" />
+            Managerial Agent
+          </Label>
+          <Input
+            id="lyzr-manager-id"
+            placeholder="69ea29fa48859962fb807a69"
+            value={config.agentId}
+            onChange={(e) => onChange({ agentId: e.target.value })}
+            className="h-7 text-xs font-mono"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="lyzr-ocr-id" className="text-xs flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+            OCR Agent
+          </Label>
+          <Input
+            id="lyzr-ocr-id"
+            placeholder="69ea4e96b6a1f25b871d5302"
+            value={config.ocrAgentId}
+            onChange={(e) => onChange({ ocrAgentId: e.target.value })}
+            className="h-7 text-xs font-mono"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="lyzr-validator-id" className="text-xs flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full bg-teal-400 shrink-0" />
+            Validator Agent
+          </Label>
+          <Input
+            id="lyzr-validator-id"
+            placeholder="69ea4e968dccef41d94cc060"
+            value={config.validatorAgentId}
+            onChange={(e) => onChange({ validatorAgentId: e.target.value })}
+            className="h-7 text-xs font-mono"
+          />
+        </div>
+      </div>
+
+      {allConfigured && (
         <Badge variant="outline" className="w-fit bg-green-50 text-green-700 border-green-200 text-[10px]">
-          Agent Connected
+          All Agents Connected
         </Badge>
       )}
-      {config.enabled && (!config.apiKey || !config.agentId || !config.userId) && (
+      {config.enabled && !allConfigured && (
         <Badge variant="outline" className="w-fit bg-amber-50 text-amber-700 border-amber-200 text-[10px]">
           Missing required fields
         </Badge>

@@ -5,6 +5,8 @@ export interface LyzrAgentConfig {
   enabled: boolean
   apiKey: string
   agentId: string
+  ocrAgentId: string
+  validatorAgentId: string
   userId: string
   sessionId: string
 }
@@ -21,6 +23,8 @@ const defaultConfig: LyzrAgentConfig = {
   enabled: true,
   apiKey: "sk-default-D0plT8nq8DdRpw5LR956a7J4Df7Yo2QC",
   agentId: "69ea29fa48859962fb807a69",
+  ocrAgentId: "69ea4e96b6a1f25b871d5302",
+  validatorAgentId: "69ea4e968dccef41d94cc060",
   userId: "jeremy.yu@movate.com",
   sessionId: "",
 }
