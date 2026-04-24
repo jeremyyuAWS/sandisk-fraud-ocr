@@ -6,14 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { LyzrAgentConfig } from "@/data/lyzr-config"
-
-const scenarioOptions = [
-  { id: "genuine", label: "Genuine Product", color: "bg-green-50 text-green-700 border-green-200" },
-  { id: "suspicious", label: "Suspicious / Fraudulent", color: "bg-red-50 text-red-700 border-red-200" },
-  { id: "unverifiable", label: "Unverifiable Image", color: "bg-amber-50 text-amber-700 border-amber-200" },
-]
 
 interface ScenarioSwitcherProps {
   selected: string
@@ -23,12 +16,12 @@ interface ScenarioSwitcherProps {
   onClose: () => void
 }
 
-export function ScenarioSwitcherPanel({ selected, onSelect, lyzrConfig, onLyzrConfigChange, onClose }: ScenarioSwitcherProps) {
+export function ScenarioSwitcherPanel({ lyzrConfig, onLyzrConfigChange, onClose }: ScenarioSwitcherProps) {
   return (
     <div className="absolute right-0 top-full mt-2 bg-background border border-border rounded-lg shadow-lg min-w-[300px] z-[60]">
       <div className="flex items-center justify-between px-3 pt-3 pb-1">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          Demo Controls
+          Movate Agents
         </span>
         <Button
           variant="ghost"
@@ -39,40 +32,9 @@ export function ScenarioSwitcherPanel({ selected, onSelect, lyzrConfig, onLyzrCo
           x
         </Button>
       </div>
-      <Tabs defaultValue="scenarios" className="px-3 pb-3">
-        <TabsList className="w-full">
-          <TabsTrigger value="scenarios" className="flex-1 text-xs">Scenarios</TabsTrigger>
-          <TabsTrigger value="settings" className="flex-1 text-xs">Movate Agents</TabsTrigger>
-        </TabsList>
-        <TabsContent value="scenarios" className="mt-2">
-          <div className="space-y-1.5">
-            {scenarioOptions.map((opt) => (
-              <button
-                key={opt.id}
-                onClick={() => {
-                  onSelect(opt.id)
-                  onClose()
-                }}
-                className={`w-full text-left px-2.5 py-1.5 rounded-md text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                  selected === opt.id
-                    ? "bg-secondary font-medium"
-                    : "hover:bg-secondary/50"
-                }`}
-              >
-                {opt.label}
-                {selected === opt.id && (
-                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${opt.color}`}>
-                    Active
-                  </Badge>
-                )}
-              </button>
-            ))}
-          </div>
-        </TabsContent>
-        <TabsContent value="settings" className="mt-2">
-          <LyzrSettingsPanel config={lyzrConfig} onChange={onLyzrConfigChange} />
-        </TabsContent>
-      </Tabs>
+      <div className="px-3 pb-3 pt-2">
+        <LyzrSettingsPanel config={lyzrConfig} onChange={onLyzrConfigChange} />
+      </div>
     </div>
   )
 }
