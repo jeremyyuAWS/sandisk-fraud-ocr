@@ -1,5 +1,4 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2.104.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,10 +7,7 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const LYZR_CHAT_URL = "https://agent-prod.studio.lyzr.ai/v3/inference/chat/";
-
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const LYZR_BASE = "https://agent-prod.studio.lyzr.ai/v3";
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body, null, 2), {
@@ -59,40 +55,37 @@ Deno.serve(async (req: Request) => {
     const sessionId = `${agentId}-test-${uniqueSuffix}`;
     const ephemeralUserId = `ocr-test-${uniqueSuffix}@test.local`;
 
-    // Step 1: Upload image to Supabase Storage
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Step 1: Upload image to Lyzr assets endpoint
     const bytes = base64ToUint8Array(imageBase64);
-    const fileName = `test/${crypto.randomUUID()}.jpg`;
+    const blob = new Blob([bytes], { type: "image/jpeg" });
+    const formData = new FormData();
+    formData.append("agent_id", agentId);
+    formData.append("files", blob, `upload-${uniqueSuffix}.jpg`);
 
-    const { error: uploadError } = await supabase.storage
-      .from("chat-images")
-      .upload(fileName, bytes, {
-        contentType: "image/jpeg",
-        upsert: false,
-      });
+    const uploadRes = await fetch(`${LYZR_BASE}/assets/upload`, {
+      method: "POST",
+      headers: { "x-api-key": apiKey },
+      body: formData,
+    });
 
-    if (uploadError) {
+    const uploadData = await uploadRes.json();
+
+    if (!uploadRes.ok || !uploadData.results?.[0]?.asset_id) {
       return jsonResponse({
-        step: "upload",
-        error: uploadError.message,
+        step: "lyzr_asset_upload",
+        error: uploadData.detail || uploadData.error || "Asset upload failed",
+        upload_response: uploadData,
       }, 500);
     }
 
-    const { data: urlData } = supabase.storage
-      .from("chat-images")
-      .getPublicUrl(fileName);
+    const assetId = uploadData.results[0].asset_id as string;
+    const assetUrl = uploadData.results[0].url as string;
 
-    const imageUrl = urlData.publicUrl;
-
-    // Step 2: Send to Lyzr with the image URL in the message
-    // Use an ephemeral user_id so Lyzr cannot return cached results from a
-    // previous conversation tied to the real user account.
-    const message = `Analyze this product image and return the result as JSON. Image URL: ${imageUrl}`;
-
+    // Step 2: Send chat request with asset reference
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000);
 
-    const lyzrResponse = await fetch(LYZR_CHAT_URL, {
+    const lyzrResponse = await fetch(`${LYZR_BASE}/inference/chat/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -102,7 +95,8 @@ Deno.serve(async (req: Request) => {
         user_id: ephemeralUserId,
         agent_id: agentId,
         session_id: sessionId,
-        message,
+        message: "Analyze this product image and return the result as JSON.",
+        assets: [assetId],
       }),
       signal: controller.signal,
     });
@@ -124,7 +118,8 @@ Deno.serve(async (req: Request) => {
         agent_id: agentId,
         session_id: sessionId,
         ephemeral_user_id: ephemeralUserId,
-        image_url: imageUrl,
+        lyzr_asset_id: assetId,
+        lyzr_asset_url: assetUrl,
         image_size_bytes: bytes.length,
         lyzr_status: lyzrResponse.status,
         lyzr_ok: lyzrResponse.ok,
