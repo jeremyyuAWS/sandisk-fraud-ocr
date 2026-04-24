@@ -17,20 +17,26 @@ interface LyzrRequest {
 }
 
 function base64ToBlob(dataUrl: string): { blob: Blob; filename: string } {
-  const match = dataUrl.match(/^data:(image\/(\w+));base64,(.+)$/);
-  if (!match) {
-    throw new Error("Invalid data URL");
+  const commaIdx = dataUrl.indexOf(",");
+  if (commaIdx === -1) {
+    throw new Error("Invalid data URL: no comma separator");
   }
-  const mimeType = match[1];
-  const ext = match[2];
-  const raw = atob(match[3]);
+
+  const meta = dataUrl.slice(0, commaIdx);
+  const b64 = dataUrl.slice(commaIdx + 1);
+
+  const mimeMatch = meta.match(/data:(image\/([a-zA-Z0-9.+-]+))/);
+  const mimeType = mimeMatch?.[1] ?? "image/png";
+  const ext = mimeMatch?.[2] ?? "png";
+
+  const raw = atob(b64);
   const bytes = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) {
     bytes[i] = raw.charCodeAt(i);
   }
   return {
     blob: new Blob([bytes], { type: mimeType }),
-    filename: `upload.${ext}`,
+    filename: `upload.${ext === "jpeg" ? "jpg" : ext}`,
   };
 }
 
