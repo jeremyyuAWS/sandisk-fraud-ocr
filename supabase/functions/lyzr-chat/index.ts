@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.104.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +9,9 @@ const corsHeaders = {
 };
 
 const LYZR_CHAT_URL = "https://agent-prod.studio.lyzr.ai/v3/inference/chat/";
-const LYZR_FILE_URL = "https://agent-prod.studio.lyzr.ai/v3/inference/chat/file";
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -50,46 +53,55 @@ Deno.serve(async (req: Request) => {
     const effectiveSessionId =
       sessionId || `${agentId}-${crypto.randomUUID().slice(0, 12)}`;
 
+    let finalMessage = message;
+
+    if (imageBase64) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey);
+      const bytes = base64ToUint8Array(imageBase64);
+      const fileName = `${crypto.randomUUID()}.jpg`;
+      const filePath = `uploads/${fileName}`;
+
+      console.log("Uploading image to storage:", filePath, bytes.length, "bytes");
+
+      const { error: uploadError } = await supabase.storage
+        .from("chat-images")
+        .upload(filePath, bytes, {
+          contentType: "image/jpeg",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError.message);
+        return jsonResponse({ error: `Image upload failed: ${uploadError.message}` }, 500);
+      }
+
+      const { data: urlData } = supabase.storage
+        .from("chat-images")
+        .getPublicUrl(filePath);
+
+      const imageUrl = urlData.publicUrl;
+      console.log("Image public URL:", imageUrl);
+
+      finalMessage = `${message}\n\nProduct image URL: ${imageUrl}`;
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000);
 
-    let lyzrResponse: Response;
-
-    if (imageBase64) {
-      const bytes = base64ToUint8Array(imageBase64);
-      const blob = new Blob([bytes], { type: "image/jpeg" });
-
-      console.log("Image size:", bytes.length, "bytes");
-
-      const lyzrForm = new FormData();
-      lyzrForm.append("user_id", userId);
-      lyzrForm.append("agent_id", agentId);
-      lyzrForm.append("session_id", effectiveSessionId);
-      lyzrForm.append("message", message);
-      lyzrForm.append("file", blob, "product-image.jpg");
-
-      lyzrResponse = await fetch(LYZR_FILE_URL, {
-        method: "POST",
-        headers: { "x-api-key": apiKey },
-        body: lyzrForm,
-        signal: controller.signal,
-      });
-    } else {
-      lyzrResponse = await fetch(LYZR_CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          agent_id: agentId,
-          session_id: effectiveSessionId,
-          message,
-        }),
-        signal: controller.signal,
-      });
-    }
+    const lyzrResponse = await fetch(LYZR_CHAT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        agent_id: agentId,
+        session_id: effectiveSessionId,
+        message: finalMessage,
+      }),
+      signal: controller.signal,
+    });
 
     clearTimeout(timeout);
 
