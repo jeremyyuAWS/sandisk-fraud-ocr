@@ -626,7 +626,7 @@ export function ChatModal({
   const isLyzrConfigured = isLyzrConfiguredProp
 
   function addLog(direction: "request" | "response", sessionId: string, data: Record<string, unknown>) {
-    onAddLog(createLogEntry(direction, sessionId, data))
+    onAddLog(createLogEntry(direction, sessionId, data, "managerial"))
   }
 
   // Return flow state

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { LogEntry } from "@/data/agent-logs"
+import type { LogEntry, AgentSource } from "@/data/agent-logs"
 import type { WsEventRow } from "@/data/agent-logs"
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,35 @@ function getLevelStyle(level: string) {
 
 function getEventColor(eventType: string) {
   return EVENT_TYPE_COLORS[eventType] || "text-foreground/70"
+}
+
+// ---------------------------------------------------------------------------
+// Agent source pill config
+// ---------------------------------------------------------------------------
+
+const AGENT_SOURCE_STYLE: Record<string, { bg: string; text: string; border: string; label: string }> = {
+  ocr: { bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-300", label: "OCR Agent" },
+  validator: { bg: "bg-teal-50", text: "text-teal-800", border: "border-teal-300", label: "Validator Agent" },
+  managerial: { bg: "bg-sky-50", text: "text-sky-800", border: "border-sky-300", label: "Managerial Agent" },
+}
+
+function AgentSourcePill({ source }: { source?: AgentSource }) {
+  if (!source) return null
+  const style = AGENT_SOURCE_STYLE[source]
+  if (!style) return null
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${style.bg} ${style.text} ${style.border}`}>
+      {style.label}
+    </span>
+  )
+}
+
+function getSessionAgentSources(logs: LogEntry[]): AgentSource[] {
+  const sources = new Set<AgentSource>()
+  for (const log of logs) {
+    if (log.agentSource) sources.add(log.agentSource)
+  }
+  return Array.from(sources)
 }
 
 // ---------------------------------------------------------------------------
@@ -595,6 +624,7 @@ function ApiLogsContent({
     <div className="max-w-5xl mx-auto px-6 py-4 space-y-4">
       {sessionGroups.map((group) => {
         const isSessionOpen = expandedSessions.has(group.sessionId)
+        const agentSources = getSessionAgentSources(group.logs)
         return (
           <div key={group.sessionId} className="rounded-xl border border-border bg-card overflow-hidden">
             <button
@@ -607,6 +637,7 @@ function ApiLogsContent({
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Session</span>
                   <code className="text-xs font-mono font-semibold text-foreground truncate">{group.sessionId}</code>
+                  {agentSources.map((s) => <AgentSourcePill key={s} source={s} />)}
                 </div>
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                   <span>{group.firstTimestamp} &ndash; {group.lastTimestamp}</span>
@@ -646,6 +677,7 @@ function ApiLogsContent({
                           <Badge variant="outline" className={`text-[10px] uppercase font-semibold shrink-0 ${isReq ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-green-50 text-green-700 border-green-200"}`}>
                             {log.direction}
                           </Badge>
+                          <AgentSourcePill source={log.agentSource} />
                           <span className="font-mono text-xs text-muted-foreground shrink-0">{fmtTime(log.createdAt) || log.timestamp}</span>
                           <span className="text-xs text-muted-foreground truncate flex-1">{Object.keys(log.data).length} fields</span>
                           {isPayloadOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}

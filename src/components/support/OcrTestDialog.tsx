@@ -107,7 +107,7 @@ export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogPro
         user_id: LYZR_USER_ID,
         image_file: fileName,
         endpoint: apiUrl,
-      }))
+      }, "ocr"))
 
       setState("analyzing")
 
@@ -133,7 +133,7 @@ export function OcrTestDialog({ open, onOpenChange, onAddLog }: OcrTestDialogPro
         http_status: res.status,
         ok: res.ok,
         body: data,
-      }))
+      }, "ocr"))
 
       if (!res.ok) {
         setState("error")

@@ -1,11 +1,14 @@
 import { supabase } from "@/lib/supabase"
 
+export type AgentSource = "ocr" | "validator" | "managerial"
+
 export interface LogEntry {
   id: number
   timestamp: string
   createdAt: string
   direction: "request" | "response"
   sessionId: string
+  agentSource?: AgentSource
   data: Record<string, unknown>
 }
 
@@ -14,7 +17,8 @@ let counter = 0
 export function createLogEntry(
   direction: "request" | "response",
   sessionId: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  agentSource?: AgentSource
 ): LogEntry {
   const now = new Date()
   return {
@@ -25,6 +29,7 @@ export function createLogEntry(
     createdAt: now.toISOString(),
     direction,
     sessionId,
+    agentSource,
     data,
   }
 }
@@ -35,13 +40,14 @@ export async function persistLog(entry: LogEntry): Promise<void> {
     direction: entry.direction,
     timestamp_label: entry.timestamp,
     payload: entry.data,
+    agent_source: entry.agentSource || null,
   })
 }
 
 export async function loadLogs(): Promise<LogEntry[]> {
   const { data, error } = await supabase
     .from("agent_logs")
-    .select("id, session_id, direction, timestamp_label, payload, created_at")
+    .select("id, session_id, direction, timestamp_label, payload, created_at, agent_source")
     .order("created_at", { ascending: true })
 
   if (error || !data) return []
@@ -54,6 +60,7 @@ export async function loadLogs(): Promise<LogEntry[]> {
       createdAt: row.created_at,
       direction: row.direction as "request" | "response",
       sessionId: row.session_id,
+      agentSource: (row.agent_source as AgentSource) || undefined,
       data: row.payload as Record<string, unknown>,
     }
     if (row.id > counter) counter = row.id

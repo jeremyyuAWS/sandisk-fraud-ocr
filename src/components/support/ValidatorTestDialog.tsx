@@ -68,7 +68,7 @@ export function ValidatorTestDialog({ open, onOpenChange, onAddLog }: ValidatorT
         user_id: LYZR_USER_ID,
         payload_length: jsonInput.length,
         endpoint: apiUrl,
-      }))
+      }, "validator"))
 
       const res = await fetch(apiUrl, {
         method: "POST",
@@ -92,7 +92,7 @@ export function ValidatorTestDialog({ open, onOpenChange, onAddLog }: ValidatorT
         http_status: res.status,
         ok: res.ok,
         body: data,
-      }))
+      }, "validator"))
 
       if (!res.ok) {
         setState("error")
