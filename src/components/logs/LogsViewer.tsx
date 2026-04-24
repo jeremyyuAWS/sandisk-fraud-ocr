@@ -361,7 +361,7 @@ export function LogsViewer({ open, logs, wsEvents, onClose, onClear, onDeleteSes
               <SelectTrigger className="h-8 w-[180px] text-xs">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent position="popper">
+              <SelectContent position="popper" className="z-[200]">
                 {TIMEZONES.map((tz) => (
                   <SelectItem key={tz.value} value={tz.value} className="text-xs">
                     {tz.label}
