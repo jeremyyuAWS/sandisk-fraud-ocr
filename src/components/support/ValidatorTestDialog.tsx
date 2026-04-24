@@ -170,7 +170,7 @@ export function ValidatorTestDialog({ open, onOpenChange, onAddLog }: ValidatorT
 
         <Separator />
 
-        <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col gap-4 overflow-auto">
           {/* JSON input */}
           {state === "idle" && (
             <div className="flex flex-col gap-2">
@@ -191,7 +191,7 @@ export function ValidatorTestDialog({ open, onOpenChange, onAddLog }: ValidatorT
                 value={jsonInput}
                 onChange={(e) => setJsonInput(e.target.value)}
                 placeholder='{"visual_attributes": {...}, "text_extractions": [...]}'
-                className="min-h-[160px] font-mono text-xs resize-none"
+                className="min-h-[160px] max-h-[50vh] font-mono text-xs overflow-auto"
               />
               <Button
                 size="sm"
