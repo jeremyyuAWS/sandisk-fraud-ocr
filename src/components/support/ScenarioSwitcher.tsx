@@ -92,11 +92,12 @@ function LyzrSettingsPanel({
           <Label htmlFor="lyzr-user-id" className="text-xs">User ID</Label>
           <Input
             id="lyzr-user-id"
-            placeholder="jeremy.yu@movate.com"
+            placeholder="user-abc123@demo.movate.com"
             value={config.userId}
             onChange={(e) => onChange({ userId: e.target.value })}
             className="h-7 text-xs"
           />
+          <p className="text-[10px] text-muted-foreground">Auto-generated on each new session</p>
         </div>
       </div>
 

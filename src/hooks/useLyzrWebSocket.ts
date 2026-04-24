@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react"
 
 export interface WsEvent {
   text: string
+  agentName: string
   timestamp: string
   status: "pending" | "done"
 }
@@ -13,6 +14,35 @@ export interface RawWsEvent {
   level: string
   agentName: string
   receivedAt: string
+}
+
+const HIDDEN_EVENT_TYPES = new Set([
+  "llm_generation",
+  "thinking_log",
+  "tool_call_prepare",
+  "tool_called",
+  "tool_calling_iteration",
+  "tool_response",
+  "tool_output",
+  "message_role_converted",
+  "artifact_create_success",
+  "lyzr_memory_process_started",
+  "lyzr_memory_process_completed",
+  "lyzr_memory_save_completed",
+])
+
+const EVENT_LABELS: Record<string, string> = {
+  agent_process_start: "Processing started",
+  agent_process_end: "Processing complete",
+  kb_documents_retrieved: "Knowledge base queried",
+  human_intervention_triggered: "Human intervention triggered",
+  process_complete: "Process complete",
+}
+
+function readableText(eventType: string, message: string): string {
+  if (EVENT_LABELS[eventType]) return EVENT_LABELS[eventType]
+  if (message && message !== "{}") return message
+  return eventType.replace(/_/g, " ")
 }
 
 function ts() {
@@ -61,24 +91,30 @@ export function useLyzrWebSocket(onRawEvent?: (event: RawWsEvent) => void) {
 
         if (!text || text === "ping") return
 
+        const eventType = (parsed?.event_type as string) || ""
+        const agentName = (parsed?.agent_name as string) || ""
+
         if (parsed && onRawEventRef.current) {
           onRawEventRef.current({
             sessionId,
             payload: parsed,
-            eventType: (parsed.event_type as string) || "",
+            eventType,
             level: (parsed.level as string) || "",
-            agentName: (parsed.agent_name as string) || "",
+            agentName,
             receivedAt: new Date().toISOString(),
           })
         }
 
         if (text.toLowerCase().includes("in_progress")) return
+        if (HIDDEN_EVENT_TYPES.has(eventType)) return
+
+        const displayText = readableText(eventType, (parsed?.message as string) || "")
 
         setEvents((prev) => {
           const updated = prev.map((ev) =>
             ev.status === "pending" ? { ...ev, status: "done" as const } : ev
           )
-          return [...updated, { text, timestamp: ts(), status: "pending" }]
+          return [...updated, { text: displayText, agentName, timestamp: ts(), status: "pending" }]
         })
       }
 

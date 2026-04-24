@@ -63,9 +63,10 @@ export default function App() {
   }, [])
 
   const openChat = useCallback(() => {
+    resetLyzrSession()
     setChatOpen(true)
-    setChatStep((prev) => (prev === "closed" ? "welcome" : prev))
-  }, [])
+    setChatStep("welcome")
+  }, [resetLyzrSession])
 
   const closeChat = useCallback(() => {
     setChatOpen(false)

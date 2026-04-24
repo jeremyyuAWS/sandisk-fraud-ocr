@@ -19,13 +19,18 @@ function generateSessionId(agentId: string): string {
   return `${agentId}-${random}`
 }
 
+function generateRandomUserId(): string {
+  const random = Math.random().toString(36).substring(2, 10)
+  return `user-${random}@demo.movate.com`
+}
+
 const defaultConfig: LyzrAgentConfig = {
   enabled: true,
   apiKey: "sk-default-D0plT8nq8DdRpw5LR956a7J4Df7Yo2QC",
   agentId: "69ea29fa48859962fb807a69",
   ocrAgentId: "69ea4e96b6a1f25b871d5302",
   validatorAgentId: "69ea4e968dccef41d94cc060",
-  userId: "jeremy.yu@movate.com",
+  userId: "",
   sessionId: "",
 }
 
@@ -39,6 +44,9 @@ function loadLocalConfig(): LyzrAgentConfig {
   }
   if (!config.sessionId) {
     config.sessionId = generateSessionId(config.agentId)
+  }
+  if (!config.userId) {
+    config.userId = generateRandomUserId()
   }
   return config
 }
@@ -89,12 +97,13 @@ export function useLyzrConfig() {
 
   const resetSession = useCallback(() => {
     const newSessionId = generateSessionId(configRef.current.agentId)
+    const newUserId = generateRandomUserId()
     setConfigState((prev) => {
-      const next = { ...prev, sessionId: newSessionId }
+      const next = { ...prev, sessionId: newSessionId, userId: newUserId }
       saveLocalConfig(next)
       return next
     })
-    return newSessionId
+    return { sessionId: newSessionId, userId: newUserId }
   }, [])
 
   const getConfig = useCallback(() => configRef.current, [])

@@ -37,7 +37,7 @@ interface ChatModalProps {
   onImageUploaded?: (url: string) => void
   lyzrConfig: LyzrAgentConfig
   isLyzrConfigured: boolean
-  onResetSession: () => string
+  onResetSession: () => { sessionId: string; userId: string }
   onAddLog: (log: LogEntry) => void
   onRawWsEvent?: (event: RawWsEvent) => void
 }
@@ -621,7 +621,7 @@ export function ChatModal({
   const [isExpanded, setIsExpanded] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [showWelcome, setShowWelcome] = useState(true)
-  const [showWsActivity, setShowWsActivity] = useState(true)
+  const [showWsActivity, setShowWsActivity] = useState(false)
 
   const isLyzrConfigured = isLyzrConfiguredProp
 
@@ -763,9 +763,9 @@ export function ChatModal({
   }
 
   function resetAndSync() {
-    const newSessionId = onResetSession()
-    lyzrConfigRef.current = { ...lyzrConfigRef.current, sessionId: newSessionId }
-    return newSessionId
+    const { sessionId, userId } = onResetSession()
+    lyzrConfigRef.current = { ...lyzrConfigRef.current, sessionId, userId }
+    return sessionId
   }
 
   function handleNewSession() {
