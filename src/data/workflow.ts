@@ -1,5 +1,5 @@
 import type { LyzrAgentConfig } from "./lyzr-config"
-import type { Scenario, WarrantyInfo } from "./scenarios"
+import type { Scenario } from "./scenarios"
 import { createLogEntry, type LogEntry } from "./agent-logs"
 import {
   normalizeChecks,
@@ -35,11 +35,20 @@ export interface ValidatorOutput {
   raw: Record<string, unknown>
 }
 
+export interface ValidatorKbData {
+  productName: string
+  matchStatus: string
+  purchaseDate?: string
+  priorClaims?: number
+  replacementEligible?: boolean
+  detailsVerified: string[]
+}
+
 export interface WorkflowResult {
   ocrOutput: OcrOutput | null
   validatorOutput: ValidatorOutput | null
   validationRow: ValidationResultRow | null
-  orderSummary: WarrantyInfo | null
+  validatorKbData: ValidatorKbData | null
   managerSummary: string | null
   error: string | null
 }
@@ -248,7 +257,7 @@ export async function runVerificationWorkflow(opts: {
     ocrOutput: null,
     validatorOutput: null,
     validationRow: null,
-    orderSummary: null,
+    validatorKbData: null,
     managerSummary: null,
     error: null,
   }
@@ -265,7 +274,6 @@ export async function runVerificationWorkflow(opts: {
       registered: scenario.warranty.registered,
       replacementEligible: scenario.warranty.replacementEligible,
     }
-    result.orderSummary = orderSummary
     addLog(createLogEntry("request", config.sessionId, {
       step: "order-lookup",
       serialNumber: scenario.warranty.serialNumber,
@@ -343,6 +351,7 @@ export async function runVerificationWorkflow(opts: {
       }, "validator"))
     }
     result.validatorOutput = valResult.output
+    result.validatorKbData = extractValidatorKbData(valResult.output.raw)
 
     // Step 4: Persist validation result (with OCR input stored alongside)
     const valRawWithMeta: Record<string, unknown> = {
@@ -482,7 +491,7 @@ export function runOfflineVerification(scenario: Scenario): WorkflowResult {
     ocrOutput,
     validatorOutput,
     validationRow,
-    orderSummary: { ...scenario.warranty },
+    validatorKbData: null,
     managerSummary: fallbackSummary(overallStatus),
     error: null,
   }
@@ -491,6 +500,37 @@ export function runOfflineVerification(scenario: Scenario): WorkflowResult {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function extractValidatorKbData(raw: Record<string, unknown>): ValidatorKbData | null {
+  const vr = (raw.validation_result || raw.match_assessment) as Record<string, unknown> | string | null
+  if (!vr || typeof vr === "string") {
+    if (typeof vr === "string") {
+      return {
+        productName: String(raw.ocr_product_name || raw.product_name || ""),
+        matchStatus: vr,
+        detailsVerified: [],
+      }
+    }
+    return null
+  }
+
+  const productName = String(
+    vr.product_name || vr.productName || raw.ocr_product_name || ""
+  )
+  const matchStatus = String(vr.status || vr.match_status || "Unknown")
+  const purchaseDate = vr.purchase_date ? String(vr.purchase_date) : undefined
+  const priorClaims = typeof vr.prior_claims === "number" ? vr.prior_claims : undefined
+  const replacementEligible = typeof vr.eligible_for_replacement === "boolean"
+    ? vr.eligible_for_replacement
+    : undefined
+  const detailsVerified = Array.isArray(vr.details_verified)
+    ? (vr.details_verified as string[])
+    : []
+
+  if (!productName && !matchStatus) return null
+
+  return { productName, matchStatus, purchaseDate, priorClaims, replacementEligible, detailsVerified }
+}
 
 function tryParseJson(text: string): Record<string, unknown> | null {
   try {

@@ -707,10 +707,8 @@ export function ChatModal({
           from: "bot",
           component: offlineResult.validatorOutput ? (
             <ValidationDashboard
-              ocrOutput={offlineResult.ocrOutput}
               validatorOutput={offlineResult.validatorOutput}
               productName={scenario.warranty.product}
-              orderSummary={scenario.warranty}
             />
           ) : (
             <OcrResultCard scenario={scenario} />
@@ -775,10 +773,8 @@ export function ChatModal({
           from: "bot",
           component: offlineResult.validatorOutput ? (
             <ValidationDashboard
-              ocrOutput={offlineResult.ocrOutput}
               validatorOutput={offlineResult.validatorOutput}
               productName={scenario.warranty.product}
-              orderSummary={scenario.warranty}
             />
           ) : (
             <ReturnFraudCard result={fraudResult} />
@@ -1044,10 +1040,9 @@ export function ChatModal({
       if (result.validatorOutput) {
         addComponent("bot", (
           <ValidationDashboard
-            ocrOutput={result.ocrOutput}
             validatorOutput={result.validatorOutput}
             productName={scenario.warranty.product}
-            orderSummary={result.orderSummary ?? undefined}
+            validatorKbData={result.validatorKbData}
           />
         ))
       }

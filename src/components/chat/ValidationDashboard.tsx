@@ -4,9 +4,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
-import type { OcrOutput, ValidatorOutput, WorkflowProgress } from "@/data/workflow"
+import type { ValidatorOutput, ValidatorKbData, WorkflowProgress } from "@/data/workflow"
 import type { ValidationCheck } from "@/data/validation-results"
-import type { WarrantyInfo } from "@/data/scenarios"
 
 // ---------------------------------------------------------------------------
 // Workflow progress indicator (used while agents are working)
@@ -91,14 +90,12 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; b
 }
 
 interface ValidationDashboardProps {
-  ocrOutput: OcrOutput | null
   validatorOutput: ValidatorOutput
   productName?: string
-  orderSummary?: WarrantyInfo
+  validatorKbData?: ValidatorKbData | null
 }
 
-export function ValidationDashboard({ ocrOutput, validatorOutput, productName, orderSummary }: ValidationDashboardProps) {
-  const [showOcr, setShowOcr] = useState(false)
+export function ValidationDashboard({ validatorOutput, productName, validatorKbData }: ValidationDashboardProps) {
   const [showKb, setShowKb] = useState(true)
   const status = STATUS_CONFIG[validatorOutput.overallStatus] || STATUS_CONFIG.flagged
   const StatusIcon = status.Icon
@@ -206,8 +203,8 @@ export function ValidationDashboard({ ocrOutput, validatorOutput, productName, o
           </>
         )}
 
-        {/* Product KB details */}
-        {orderSummary && (
+        {/* Validator KB details -- only shown when live agent returned KB data */}
+        {validatorKbData && (
           <>
             <Separator />
             <button
@@ -222,109 +219,86 @@ export function ValidationDashboard({ ocrOutput, validatorOutput, productName, o
             {showKb && (
               <div className="rounded-md border border-border bg-muted/30 p-3">
                 <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Product Knowledge Base
+                  Validator Agent -- Product KB
                 </div>
                 <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs items-center">
                   <span className="text-muted-foreground">Product</span>
-                  <span className="text-foreground">{orderSummary.product}</span>
+                  <span className="text-foreground">{validatorKbData.productName}</span>
 
-                  <span className="text-muted-foreground">Serial Number</span>
-                  <span className="font-mono text-foreground">{orderSummary.serialNumber}</span>
-
-                  <span className="text-muted-foreground">Warranty Status</span>
+                  <span className="text-muted-foreground">Match Status</span>
                   <span>
                     <Badge
                       variant="outline"
                       className={`text-[10px] ${
-                        orderSummary.status === "Active"
+                        validatorKbData.matchStatus === "Match"
                           ? "bg-green-50 text-green-700 border-green-200"
-                          : orderSummary.status === "Expired"
+                          : validatorKbData.matchStatus === "No Match"
                             ? "bg-red-50 text-red-700 border-red-200"
                             : "bg-amber-50 text-amber-700 border-amber-200"
                       }`}
                     >
-                      {orderSummary.status}
+                      {validatorKbData.matchStatus}
                     </Badge>
                   </span>
 
-                  <span className="text-muted-foreground">Purchase Date</span>
-                  <span className="text-foreground">{orderSummary.purchaseDate}</span>
+                  {validatorKbData.purchaseDate && (
+                    <>
+                      <span className="text-muted-foreground">Purchase Date</span>
+                      <span className="text-foreground">{validatorKbData.purchaseDate}</span>
+                    </>
+                  )}
 
-                  <span className="text-muted-foreground">Registered</span>
-                  <span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] ${
-                        orderSummary.registered
-                          ? "bg-green-50 text-green-700 border-green-200"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {orderSummary.registered ? "Yes" : "No"}
-                    </Badge>
-                  </span>
+                  {validatorKbData.priorClaims != null && (
+                    <>
+                      <span className="text-muted-foreground">Prior Claims</span>
+                      <span
+                        className={`font-medium ${
+                          validatorKbData.priorClaims === 0
+                            ? "text-green-700"
+                            : validatorKbData.priorClaims === 1
+                              ? "text-amber-700"
+                              : "text-red-700"
+                        }`}
+                      >
+                        {validatorKbData.priorClaims}
+                      </span>
+                    </>
+                  )}
 
-                  <span className="text-muted-foreground">Prior Claims</span>
-                  <span
-                    className={`font-medium ${
-                      orderSummary.priorClaims === 0
-                        ? "text-green-700"
-                        : orderSummary.priorClaims === 1
-                          ? "text-amber-700"
-                          : "text-red-700"
-                    }`}
-                  >
-                    {orderSummary.priorClaims}
-                  </span>
-
-                  <span className="text-muted-foreground">Replacement Eligible</span>
-                  <span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] ${
-                        orderSummary.replacementEligible
-                          ? "bg-green-50 text-green-700 border-green-200"
-                          : "bg-red-50 text-red-700 border-red-200"
-                      }`}
-                    >
-                      {orderSummary.replacementEligible ? "Yes" : "No"}
-                    </Badge>
-                  </span>
+                  {validatorKbData.replacementEligible != null && (
+                    <>
+                      <span className="text-muted-foreground">Replacement Eligible</span>
+                      <span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            validatorKbData.replacementEligible
+                              ? "bg-green-50 text-green-700 border-green-200"
+                              : "bg-red-50 text-red-700 border-red-200"
+                          }`}
+                        >
+                          {validatorKbData.replacementEligible ? "Yes" : "No"}
+                        </Badge>
+                      </span>
+                    </>
+                  )}
                 </div>
-              </div>
-            )}
-          </>
-        )}
 
-        {/* OCR details toggle */}
-        {ocrOutput && (
-          <>
-            <Separator />
-            <button
-              type="button"
-              onClick={() => setShowOcr((v) => !v)}
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              {showOcr ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {showOcr ? "Hide OCR details" : "View OCR extracted data"}
-            </button>
-            {showOcr && (
-              <div className="rounded-md border border-border bg-muted/30 p-3">
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  OCR Extracted Fields
-                </div>
-                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                  <span className="text-muted-foreground">Brand</span>
-                  <span>{ocrOutput.brandDetected}</span>
-                  <span className="text-muted-foreground">Product</span>
-                  <span>{ocrOutput.productText}</span>
-                  <span className="text-muted-foreground">Capacity</span>
-                  <span>{ocrOutput.capacityDetected}</span>
-                  <span className="text-muted-foreground">Serial (Image)</span>
-                  <span className="font-mono">{ocrOutput.serialDetected}</span>
-                  <span className="text-muted-foreground">Image Quality</span>
-                  <span>{ocrOutput.imageQuality}</span>
-                </div>
+                {validatorKbData.detailsVerified.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-border">
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                      Verified Details
+                    </div>
+                    <div className="space-y-1">
+                      {validatorKbData.detailsVerified.map((detail, i) => (
+                        <div key={i} className="flex items-start gap-1.5 text-xs">
+                          <CircleCheck className="h-3 w-3 text-green-600 shrink-0 mt-0.5" />
+                          <span className="text-foreground">{detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
