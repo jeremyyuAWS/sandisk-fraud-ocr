@@ -1,5 +1,5 @@
 import type { LyzrAgentConfig } from "./lyzr-config"
-import type { Scenario } from "./scenarios"
+import type { Scenario, WarrantyInfo } from "./scenarios"
 import { createLogEntry, type LogEntry } from "./agent-logs"
 import {
   normalizeChecks,
@@ -39,6 +39,7 @@ export interface WorkflowResult {
   ocrOutput: OcrOutput | null
   validatorOutput: ValidatorOutput | null
   validationRow: ValidationResultRow | null
+  orderSummary: WarrantyInfo | null
   managerSummary: string | null
   error: string | null
 }
@@ -247,6 +248,7 @@ export async function runVerificationWorkflow(opts: {
     ocrOutput: null,
     validatorOutput: null,
     validationRow: null,
+    orderSummary: null,
     managerSummary: null,
     error: null,
   }
@@ -263,6 +265,7 @@ export async function runVerificationWorkflow(opts: {
       registered: scenario.warranty.registered,
       replacementEligible: scenario.warranty.replacementEligible,
     }
+    result.orderSummary = orderSummary
     addLog(createLogEntry("request", config.sessionId, {
       step: "order-lookup",
       serialNumber: scenario.warranty.serialNumber,
@@ -479,6 +482,7 @@ export function runOfflineVerification(scenario: Scenario): WorkflowResult {
     ocrOutput,
     validatorOutput,
     validationRow,
+    orderSummary: { ...scenario.warranty },
     managerSummary: fallbackSummary(overallStatus),
     error: null,
   }

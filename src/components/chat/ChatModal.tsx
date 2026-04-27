@@ -710,6 +710,7 @@ export function ChatModal({
               ocrOutput={offlineResult.ocrOutput}
               validatorOutput={offlineResult.validatorOutput}
               productName={scenario.warranty.product}
+              orderSummary={scenario.warranty}
             />
           ) : (
             <OcrResultCard scenario={scenario} />
@@ -777,6 +778,7 @@ export function ChatModal({
               ocrOutput={offlineResult.ocrOutput}
               validatorOutput={offlineResult.validatorOutput}
               productName={scenario.warranty.product}
+              orderSummary={scenario.warranty}
             />
           ) : (
             <ReturnFraudCard result={fraudResult} />
@@ -1045,6 +1047,7 @@ export function ChatModal({
             ocrOutput={result.ocrOutput}
             validatorOutput={result.validatorOutput}
             productName={scenario.warranty.product}
+            orderSummary={result.orderSummary ?? undefined}
           />
         ))
       }
