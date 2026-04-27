@@ -1003,16 +1003,15 @@ export function ChatModal({
     onImageUploaded?.(objectUrl)
     addComponent("user", <ImagePreview src={objectUrl} alt="Uploaded product" />)
     setIsSending(true)
+    ws.connect(cfg.sessionId, cfg.apiKey)
 
     try {
       const compressed = await compressImage(file)
 
       // App-driven orchestration: OCR -> Validator -> Dashboard -> Manager summary
-      let currentProgress: WorkflowProgress = { phase: "order-lookup", detail: "Starting..." }
       const progressKey = Date.now()
 
       const updateProgress = (p: WorkflowProgress) => {
-        currentProgress = p
         setMessages((prev) => {
           const idx = prev.findIndex((m) => m.timestamp === `progress-${progressKey}`)
           if (idx === -1) {
@@ -1035,6 +1034,8 @@ export function ChatModal({
         onValidation: (row) => onValidationResult?.(row),
       })
 
+      ws.disconnect()
+
       // Remove progress bar, replace with final dashboard
       setMessages((prev) => prev.filter((m) => m.timestamp !== `progress-${progressKey}`))
 
@@ -1054,6 +1055,7 @@ export function ChatModal({
         addMsg("bot", `Verification encountered an issue: ${result.error}. A support specialist can assist you.`)
       }
     } catch (err) {
+      ws.disconnect()
       addMsg("bot", "Failed to analyze the image. Please check your agent settings.")
     } finally {
       setIsSending(false)

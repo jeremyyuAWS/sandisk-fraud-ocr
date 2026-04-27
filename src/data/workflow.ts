@@ -7,6 +7,10 @@ import {
   type ValidationResultRow,
   type ValidationCheck,
 } from "./validation-results"
+import {
+  extractedResultToValidationRow,
+  type ExtractedAgentResult,
+} from "./ws-agent-extractor"
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -256,13 +260,31 @@ export async function runVerificationWorkflow(opts: {
       status: scenario.warranty.status,
       purchaseDate: scenario.warranty.purchaseDate,
       priorClaims: scenario.warranty.priorClaims,
+      registered: scenario.warranty.registered,
+      replacementEligible: scenario.warranty.replacementEligible,
     }
     addLog(createLogEntry("request", config.sessionId, {
       step: "order-lookup",
       serialNumber: scenario.warranty.serialNumber,
+    }, "managerial"))
+    addLog(createLogEntry("response", config.sessionId, {
+      step: "order-lookup",
       result: "found",
       orderSummary,
     }, "managerial"))
+
+    // Persist order lookup as a validation entry
+    const orderResult: ExtractedAgentResult = {
+      type: "order_lookup",
+      sessionId: config.sessionId,
+      agentId: config.agentId,
+      rawData: orderSummary,
+      inputPayload: null,
+      timestamp: new Date().toISOString(),
+    }
+    const orderRow = extractedResultToValidationRow(orderResult, config.userId)
+    persistValidationResult(orderRow)
+    onValidation(orderRow)
 
     // Step 2: Call OCR agent directly
     onProgress({ phase: "ocr", detail: "Sending image to OCR agent for analysis..." })
@@ -275,6 +297,19 @@ export async function runVerificationWorkflow(opts: {
       return result
     }
 
+    // Persist OCR result as a validation entry
+    const ocrExtracted: ExtractedAgentResult = {
+      type: "ocr",
+      sessionId: config.sessionId,
+      agentId: config.ocrAgentId,
+      rawData: ocrResult.output.raw,
+      inputPayload: null,
+      timestamp: new Date().toISOString(),
+    }
+    const ocrRow = extractedResultToValidationRow(ocrExtracted, config.userId)
+    persistValidationResult(ocrRow)
+    onValidation(ocrRow)
+
     // Step 3: Call Validator agent with OCR output + order summary
     onProgress({ phase: "validation", detail: "Sending OCR result and order data to Validator agent..." })
     const valResult = await callValidatorAgent(config, ocrResult.output.raw, orderSummary, addLog)
@@ -286,14 +321,20 @@ export async function runVerificationWorkflow(opts: {
       return result
     }
 
-    // Step 4: Persist validation result
+    // Step 4: Persist validation result (with OCR input stored alongside)
+    const valRawWithMeta: Record<string, unknown> = {
+      ...valResult.output.raw,
+      _resultType: "validator",
+      _sourceAgentId: config.validatorAgentId,
+      _validatorInput: { ocr_result: ocrResult.output.raw, order_summary: orderSummary },
+    }
     const validationRow: ValidationResultRow = {
       id: Date.now() + Math.random(),
       sessionId: config.sessionId,
       agentId: config.validatorAgentId,
       userId: config.userId,
-      inputSummary: valResult.output.inputSummary,
-      rawResult: valResult.output.raw,
+      inputSummary: "Validator Agent -- Fraud Assessment",
+      rawResult: valRawWithMeta,
       checks: valResult.output.checks,
       overallStatus: valResult.output.overallStatus,
       createdAt: new Date().toISOString(),
