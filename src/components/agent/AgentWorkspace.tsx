@@ -168,7 +168,7 @@ function OcrPanel({ scenario }: { scenario: Scenario }) {
           <span className="text-muted-foreground">Product</span>
           <span>{ocr.productText}</span>
           <span className="text-muted-foreground">Capacity</span>
-          <span className={ocr.capacityDetected !== "256GB" ? "text-sandisk-red font-semibold" : ""}>
+          <span className={ocr.capacityDetected !== "32GB" ? "text-sandisk-red font-semibold" : ""}>
             {ocr.capacityDetected}
           </span>
           <span className="text-muted-foreground">Serial (Image)</span>

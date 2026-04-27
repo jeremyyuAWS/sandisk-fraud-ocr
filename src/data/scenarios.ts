@@ -37,11 +37,11 @@ export const scenarios: Record<string, Scenario> = {
   genuine: {
     id: "genuine",
     label: "Genuine Product",
-    serialEntered: "SDKX-256-88421",
-    productImage: "/sandisk-xtreme-x2.jpeg",
+    serialEntered: "BM190826778W",
+    productImage: "/cruiser-blade.jpg",
     warranty: {
-      product: "SanDisk Extreme Pro microSDXC 256GB",
-      serialNumber: "SDKX-256-88421",
+      product: "SanDisk Cruzer Blade 32GB USB Flash Drive",
+      serialNumber: "BM190826778W",
       status: "Active",
       registered: true,
       purchaseDate: "2025-09-14",
@@ -50,9 +50,9 @@ export const scenarios: Record<string, Scenario> = {
     },
     ocr: {
       brandDetected: "SanDisk",
-      productText: "Extreme Pro microSDXC",
-      serialDetected: "SDKX-256-88421",
-      capacityDetected: "256GB",
+      productText: "Cruzer Blade 32GB",
+      serialDetected: "BM190826778W",
+      capacityDetected: "32GB",
       imageQuality: "High",
     },
     risk: {
@@ -65,11 +65,11 @@ export const scenarios: Record<string, Scenario> = {
   suspicious: {
     id: "suspicious",
     label: "Suspicious / Fraudulent",
-    serialEntered: "SDKX-256-99182",
+    serialEntered: "BM190826778W",
     productImage: "/sandisk-ssd.jpeg",
     warranty: {
-      product: "SanDisk Extreme Pro microSDXC 256GB",
-      serialNumber: "SDKX-256-99182",
+      product: "SanDisk Cruzer Blade 32GB USB Flash Drive",
+      serialNumber: "BM190826778W",
       status: "Active",
       registered: true,
       purchaseDate: "2025-06-02",
@@ -79,7 +79,7 @@ export const scenarios: Record<string, Scenario> = {
     ocr: {
       brandDetected: "Unknown",
       productText: "128GB",
-      serialDetected: "SDKX-128-11111",
+      serialDetected: "SDCZ50-128G",
       capacityDetected: "128GB",
       imageQuality: "High",
     },
@@ -88,7 +88,7 @@ export const scenarios: Record<string, Scenario> = {
       level: "High",
       reasonCodes: [
         "Serial number mismatch between claim and product image",
-        "Capacity mismatch: claimed 256GB, detected 128GB",
+        "Capacity mismatch: claimed 32GB, detected 128GB",
         "Branding pattern inconsistent with known SanDisk label",
       ],
     },
@@ -97,11 +97,11 @@ export const scenarios: Record<string, Scenario> = {
   unverifiable: {
     id: "unverifiable",
     label: "Unverifiable Image",
-    serialEntered: "SDKX-256-44710",
+    serialEntered: "BM190826778W",
     productImage: "/sandisk-xtreme-hand.jpg",
     warranty: {
-      product: "SanDisk Extreme Pro microSDXC 256GB",
-      serialNumber: "SDKX-256-44710",
+      product: "SanDisk Cruzer Blade 32GB USB Flash Drive",
+      serialNumber: "BM190826778W",
       status: "Active",
       registered: true,
       purchaseDate: "2025-11-20",

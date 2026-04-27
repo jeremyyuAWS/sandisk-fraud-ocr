@@ -6,7 +6,7 @@ export function HeroBanner() {
     <section className="relative w-full h-[480px] overflow-hidden bg-foreground">
       <img
         src="/hero-banner.webp"
-        alt="SanDisk Extreme Pro memory cards"
+        alt="SanDisk Cruzer Blade USB flash drives"
         className="absolute inset-0 w-full h-full object-cover opacity-80"
       />
       <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
