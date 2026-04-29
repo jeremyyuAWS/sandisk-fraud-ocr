@@ -1,11 +1,12 @@
-import { CircleCheck, Circle as XCircle, TriangleAlert, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestionIcon, ChevronDown, ChevronUp, ScanSearch, BookOpen } from "lucide-react"
+import { CircleCheck, Circle as XCircle, TriangleAlert, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestionIcon, ChevronDown, ChevronUp, ScanSearch, Database } from "lucide-react"
 import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
-import type { ValidatorOutput, ValidatorKbData, WorkflowProgress } from "@/data/workflow"
+import type { ValidatorOutput, WorkflowProgress } from "@/data/workflow"
 import type { ValidationCheck } from "@/data/validation-results"
+import type { CatalogMatchResult } from "@/data/product-catalog"
 
 // ---------------------------------------------------------------------------
 // Workflow progress indicator (used while agents are working)
@@ -92,11 +93,11 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; b
 interface ValidationDashboardProps {
   validatorOutput: ValidatorOutput
   productName?: string
-  validatorKbData?: ValidatorKbData | null
+  catalogMatch?: CatalogMatchResult | null
 }
 
-export function ValidationDashboard({ validatorOutput, productName, validatorKbData }: ValidationDashboardProps) {
-  const [showKb, setShowKb] = useState(true)
+export function ValidationDashboard({ validatorOutput, productName, catalogMatch }: ValidationDashboardProps) {
+  const [showCatalog, setShowCatalog] = useState(true)
   const status = STATUS_CONFIG[validatorOutput.overallStatus] || STATUS_CONFIG.flagged
   const StatusIcon = status.Icon
 
@@ -104,6 +105,8 @@ export function ValidationDashboard({ validatorOutput, productName, validatorKbD
   const failCount = validatorOutput.checks.filter((c) => c.status === "fail").length
   const warnCount = validatorOutput.checks.filter((c) => c.status === "warn").length
   const total = validatorOutput.checks.length
+
+  const hasCatalogEntry = catalogMatch && catalogMatch.entry
 
   return (
     <Card className="border border-border">
@@ -203,100 +206,91 @@ export function ValidationDashboard({ validatorOutput, productName, validatorKbD
           </>
         )}
 
-        {/* Validator KB details -- only shown when live agent returned KB data */}
-        {validatorKbData && (
+        {/* Product Catalog Match section */}
+        {catalogMatch && (
           <>
             <Separator />
             <button
               type="button"
-              onClick={() => setShowKb((v) => !v)}
+              onClick={() => setShowCatalog((v) => !v)}
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
-              <BookOpen className="h-3 w-3" />
-              {showKb ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {showKb ? "Hide Product KB data" : "View Product KB data"}
+              <Database className="h-3 w-3" />
+              {showCatalog ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {showCatalog ? "Hide Product Catalog Match" : "View Product Catalog Match"}
             </button>
-            {showKb && (
-              <div className="rounded-md border border-border bg-muted/30 p-3">
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                  Validator Agent -- Product KB
-                </div>
-                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs items-center">
-                  <span className="text-muted-foreground">Product</span>
-                  <span className="text-foreground">{validatorKbData.productName}</span>
-
-                  <span className="text-muted-foreground">Match Status</span>
-                  <span>
+            {showCatalog && (
+              <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Product Catalog
+                  </div>
+                  {hasCatalogEntry ? (
                     <Badge
                       variant="outline"
                       className={`text-[10px] ${
-                        validatorKbData.matchStatus === "Match"
+                        catalogMatch.matchScore >= 70
                           ? "bg-green-50 text-green-700 border-green-200"
-                          : validatorKbData.matchStatus === "No Match"
-                            ? "bg-red-50 text-red-700 border-red-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
+                          : catalogMatch.matchScore >= 40
+                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            : "bg-red-50 text-red-700 border-red-200"
                       }`}
                     >
-                      {validatorKbData.matchStatus}
+                      {catalogMatch.matchScore}% match
                     </Badge>
-                  </span>
-
-                  {validatorKbData.purchaseDate && (
-                    <>
-                      <span className="text-muted-foreground">Purchase Date</span>
-                      <span className="text-foreground">{validatorKbData.purchaseDate}</span>
-                    </>
-                  )}
-
-                  {validatorKbData.priorClaims != null && (
-                    <>
-                      <span className="text-muted-foreground">Prior Claims</span>
-                      <span
-                        className={`font-medium ${
-                          validatorKbData.priorClaims === 0
-                            ? "text-green-700"
-                            : validatorKbData.priorClaims === 1
-                              ? "text-amber-700"
-                              : "text-red-700"
-                        }`}
-                      >
-                        {validatorKbData.priorClaims}
-                      </span>
-                    </>
-                  )}
-
-                  {validatorKbData.replacementEligible != null && (
-                    <>
-                      <span className="text-muted-foreground">Replacement Eligible</span>
-                      <span>
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] ${
-                            validatorKbData.replacementEligible
-                              ? "bg-green-50 text-green-700 border-green-200"
-                              : "bg-red-50 text-red-700 border-red-200"
-                          }`}
-                        >
-                          {validatorKbData.replacementEligible ? "Yes" : "No"}
-                        </Badge>
-                      </span>
-                    </>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] bg-red-50 text-red-700 border-red-200">
+                      No Match
+                    </Badge>
                   )}
                 </div>
 
-                {validatorKbData.detailsVerified.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-border">
-                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                      Verified Details
+                {hasCatalogEntry ? (
+                  <>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs items-center">
+                      <span className="text-muted-foreground">Product</span>
+                      <span className="text-foreground font-medium">{catalogMatch.entry!.productName}</span>
+
+                      <span className="text-muted-foreground">SKU</span>
+                      <span className="font-mono text-foreground">{catalogMatch.entry!.sku}</span>
+
+                      <span className="text-muted-foreground">Capacity</span>
+                      <span className="text-foreground">{catalogMatch.entry!.capacity}</span>
+
+                      <span className="text-muted-foreground">Interface</span>
+                      <span className="text-foreground">{catalogMatch.entry!.interface}</span>
+
+                      <span className="text-muted-foreground">Color</span>
+                      <span className="text-foreground">{catalogMatch.entry!.colorVariant}</span>
+
+                      <span className="text-muted-foreground">Connector</span>
+                      <span className="text-foreground">{catalogMatch.entry!.connectorType}</span>
+
+                      <span className="text-muted-foreground">Warranty</span>
+                      <span className="text-foreground">{catalogMatch.entry!.warrantyYears}-Year Limited</span>
+
+                      <span className="text-muted-foreground">Made In</span>
+                      <span className="text-foreground">{catalogMatch.entry!.countryOfManufacture}</span>
                     </div>
-                    <div className="space-y-1">
-                      {validatorKbData.detailsVerified.map((detail, i) => (
-                        <div key={i} className="flex items-start gap-1.5 text-xs">
-                          <CircleCheck className="h-3 w-3 text-green-600 shrink-0 mt-0.5" />
-                          <span className="text-foreground">{detail}</span>
+
+                    {catalogMatch.matchedFields.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border">
+                        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                          Matched Fields ({catalogMatch.matchedFields.length}/{catalogMatch.totalChecked})
                         </div>
-                      ))}
-                    </div>
+                        <div className="flex flex-wrap gap-1">
+                          {catalogMatch.matchedFields.map((field, i) => (
+                            <Badge key={i} variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">
+                              {field}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-xs text-muted-foreground">
+                    No matching product found in the catalog. This may indicate a counterfeit or unrecognized product.
                   </div>
                 )}
               </div>

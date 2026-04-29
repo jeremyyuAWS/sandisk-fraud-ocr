@@ -11,6 +11,7 @@ import {
   extractedResultToValidationRow,
   type ExtractedAgentResult,
 } from "./ws-agent-extractor"
+import { matchOcrToCatalog, type CatalogMatchResult } from "./product-catalog"
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -35,20 +36,11 @@ export interface ValidatorOutput {
   raw: Record<string, unknown>
 }
 
-export interface ValidatorKbData {
-  productName: string
-  matchStatus: string
-  purchaseDate?: string
-  priorClaims?: number
-  replacementEligible?: boolean
-  detailsVerified: string[]
-}
-
 export interface WorkflowResult {
   ocrOutput: OcrOutput | null
   validatorOutput: ValidatorOutput | null
   validationRow: ValidationResultRow | null
-  validatorKbData: ValidatorKbData | null
+  catalogMatch: CatalogMatchResult | null
   managerSummary: string | null
   error: string | null
 }
@@ -257,7 +249,7 @@ export async function runVerificationWorkflow(opts: {
     ocrOutput: null,
     validatorOutput: null,
     validationRow: null,
-    validatorKbData: null,
+    catalogMatch: null,
     managerSummary: null,
     error: null,
   }
@@ -332,12 +324,40 @@ export async function runVerificationWorkflow(opts: {
     persistValidationResult(ocrRow)
     onValidation(ocrRow)
 
-    // Step 3: Call Validator agent with OCR output + order summary
-    onProgress({ phase: "validation", detail: "Sending OCR result and order data to Validator agent..." })
-    const valResult = await callValidatorAgent(config, ocrResult.output.raw, orderSummary, addLog)
+    // Step 3: Match OCR output against product catalog
+    onProgress({ phase: "validation", detail: "Matching against product catalog..." })
+    const catalogMatch = await matchOcrToCatalog(ocrResult.output.raw)
+    result.catalogMatch = catalogMatch
+
+    addLog(createLogEntry("response", config.sessionId, {
+      step: "catalog-lookup",
+      matched: !!catalogMatch.entry,
+      matchScore: catalogMatch.matchScore,
+      matchedFields: catalogMatch.matchedFields,
+      product: catalogMatch.entry?.productName || null,
+    }, "managerial"))
+
+    // Build reference data for the Validator from catalog + order context
+    const catalogRef = catalogMatch.entry
+      ? {
+          product: catalogMatch.entry.productName,
+          sku: catalogMatch.entry.sku,
+          capacity: catalogMatch.entry.capacity,
+          formFactor: catalogMatch.entry.formFactor,
+          connectorType: catalogMatch.entry.connectorType,
+          expectedMarkings: catalogMatch.entry.expectedMarkings,
+          matchScore: catalogMatch.matchScore,
+          matchedFields: catalogMatch.matchedFields,
+        }
+      : null
+
+    const validatorContext = { ...orderSummary, catalog: catalogRef }
+
+    // Step 4: Call Validator agent with OCR output + catalog-enriched context
+    onProgress({ phase: "validation", detail: "Sending to Validator agent for fraud assessment..." })
+    const valResult = await callValidatorAgent(config, ocrResult.output.raw, validatorContext, addLog)
 
     if (!valResult.output) {
-      // Live agent didn't return parseable JSON -- compute validation from scenario data
       const offlineChecks = computeOfflineChecks(scenario, ocrResult.output)
       valResult.output = {
         checks: offlineChecks.checks,
@@ -351,14 +371,13 @@ export async function runVerificationWorkflow(opts: {
       }, "validator"))
     }
     result.validatorOutput = valResult.output
-    result.validatorKbData = extractValidatorKbData(valResult.output.raw)
 
-    // Step 4: Persist validation result (with OCR input stored alongside)
+    // Step 5: Persist validation result (with OCR input stored alongside)
     const valRawWithMeta: Record<string, unknown> = {
       ...valResult.output.raw,
       _resultType: "validator",
       _sourceAgentId: config.validatorAgentId,
-      _validatorInput: { ocr_result: ocrResult.output.raw, order_summary: orderSummary },
+      _validatorInput: { ocr_result: ocrResult.output.raw, order_summary: validatorContext },
     }
     const validationRow: ValidationResultRow = {
       id: Date.now() + Math.random(),
@@ -375,9 +394,10 @@ export async function runVerificationWorkflow(opts: {
     onValidation(validationRow)
     result.validationRow = validationRow
 
-    // Step 5: Ask Manager to generate customer-facing summary
+    // Step 6: Ask Manager to generate customer-facing summary
     onProgress({ phase: "manager-summary", detail: "Generating customer-facing summary..." })
-    const context = `Product: ${scenario.warranty.product}, Serial: ${scenario.warranty.serialNumber}`
+    const catalogName = catalogMatch.entry?.productName || scenario.warranty.product
+    const context = `Product: ${catalogName}, Serial: ${scenario.warranty.serialNumber}`
     result.managerSummary = await callManagerForSummary(config, valResult.output, context, addLog)
 
     onProgress({ phase: "complete", detail: "Verification complete" })
@@ -456,7 +476,7 @@ function computeOfflineChecks(
 // Offline (demo) workflow -- uses scenario data, no agent calls
 // ---------------------------------------------------------------------------
 
-export function runOfflineVerification(scenario: Scenario): WorkflowResult {
+export async function runOfflineVerification(scenario: Scenario): Promise<WorkflowResult> {
   const ocrOutput: OcrOutput = {
     brandDetected: scenario.ocr.brandDetected,
     productText: scenario.ocr.productText,
@@ -487,11 +507,13 @@ export function runOfflineVerification(scenario: Scenario): WorkflowResult {
     createdAt: new Date().toISOString(),
   }
 
+  const catalogMatch = await matchOcrToCatalog(ocrOutput.raw)
+
   return {
     ocrOutput,
     validatorOutput,
     validationRow,
-    validatorKbData: null,
+    catalogMatch,
     managerSummary: fallbackSummary(overallStatus),
     error: null,
   }
@@ -500,37 +522,6 @@ export function runOfflineVerification(scenario: Scenario): WorkflowResult {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function extractValidatorKbData(raw: Record<string, unknown>): ValidatorKbData | null {
-  const vr = (raw.validation_result || raw.match_assessment) as Record<string, unknown> | string | null
-  if (!vr || typeof vr === "string") {
-    if (typeof vr === "string") {
-      return {
-        productName: String(raw.ocr_product_name || raw.product_name || ""),
-        matchStatus: vr,
-        detailsVerified: [],
-      }
-    }
-    return null
-  }
-
-  const productName = String(
-    vr.product_name || vr.productName || raw.ocr_product_name || ""
-  )
-  const matchStatus = String(vr.status || vr.match_status || "Unknown")
-  const purchaseDate = vr.purchase_date ? String(vr.purchase_date) : undefined
-  const priorClaims = typeof vr.prior_claims === "number" ? vr.prior_claims : undefined
-  const replacementEligible = typeof vr.eligible_for_replacement === "boolean"
-    ? vr.eligible_for_replacement
-    : undefined
-  const detailsVerified = Array.isArray(vr.details_verified)
-    ? (vr.details_verified as string[])
-    : []
-
-  if (!productName && !matchStatus) return null
-
-  return { productName, matchStatus, purchaseDate, priorClaims, replacementEligible, detailsVerified }
-}
 
 function tryParseJson(text: string): Record<string, unknown> | null {
   try {

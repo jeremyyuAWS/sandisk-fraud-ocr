@@ -16,7 +16,7 @@ import { LyzrResponseCard, tryParseLyzrResponse } from "./LyzrResponseCard"
 import { AgentActivityFeed } from "./AgentActivityFeed"
 import { useLyzrWebSocket, type RawWsEvent } from "@/hooks/useLyzrWebSocket"
 import { parseValidationFromResponse, normalizeChecks, persistValidationResult, type ValidationResultRow } from "@/data/validation-results"
-import { runVerificationWorkflow, runOfflineVerification, type WorkflowProgress, type WorkflowResult } from "@/data/workflow"
+import { runVerificationWorkflow, runOfflineVerification, type WorkflowProgress } from "@/data/workflow"
 import { WorkflowProgressBar, ValidationDashboard } from "./ValidationDashboard"
 
 // ---------------------------------------------------------------------------
@@ -696,28 +696,31 @@ export function ChatModal({
   useEffect(() => {
     if (step === "ocr-result" && !ocrResultHandled.current) {
       ocrResultHandled.current = true
-      const offlineResult = runOfflineVerification(scenario)
-      if (offlineResult.validationRow) {
-        onValidationResult?.(offlineResult.validationRow)
-      }
-      const resultText = offlineResult.managerSummary || ""
-      setMessages((prev) => [
-        ...prev,
-        {
-          from: "bot",
-          component: offlineResult.validatorOutput ? (
-            <ValidationDashboard
-              validatorOutput={offlineResult.validatorOutput}
-              productName={scenario.warranty.product}
-            />
-          ) : (
-            <OcrResultCard scenario={scenario} />
-          ),
-          timestamp: now(),
-        },
-        { from: "bot", text: resultText, timestamp: now() },
-      ])
-      onStepChange("escalation")
+      ;(async () => {
+        const offlineResult = await runOfflineVerification(scenario)
+        if (offlineResult.validationRow) {
+          onValidationResult?.(offlineResult.validationRow)
+        }
+        const resultText = offlineResult.managerSummary || ""
+        setMessages((prev) => [
+          ...prev,
+          {
+            from: "bot",
+            component: offlineResult.validatorOutput ? (
+              <ValidationDashboard
+                validatorOutput={offlineResult.validatorOutput}
+                productName={scenario.warranty.product}
+                catalogMatch={offlineResult.catalogMatch}
+              />
+            ) : (
+              <OcrResultCard scenario={scenario} />
+            ),
+            timestamp: now(),
+          },
+          { from: "bot", text: resultText, timestamp: now() },
+        ])
+        onStepChange("escalation")
+      })()
     }
   }, [step, scenario, onStepChange])
 
@@ -744,46 +747,47 @@ export function ChatModal({
     if (step === "return-result" && !returnResultHandled.current) {
       returnResultHandled.current = true
 
-      // App-driven: run offline verification for the return scenario
-      const offlineResult = runOfflineVerification(scenario)
-      if (offlineResult.validationRow) {
-        onValidationResult?.(offlineResult.validationRow)
-      }
+      ;(async () => {
+        const offlineResult = await runOfflineVerification(scenario)
+        if (offlineResult.validationRow) {
+          onValidationResult?.(offlineResult.validationRow)
+        }
 
-      // Also run the legacy fraud check for return-specific context
-      const fraudResult = evaluateReturnFraud(
-        selectedScenario,
-        returnOver30,
-        returnEmail,
-        returnOrder,
-        returnReason,
-        returnImageUrl
-      )
+        const fraudResult = evaluateReturnFraud(
+          selectedScenario,
+          returnOver30,
+          returnEmail,
+          returnOrder,
+          returnReason,
+          returnImageUrl
+        )
 
-      const summary =
-        fraudResult.riskLevel === "Low"
-          ? "Your return has been approved. You will receive a return shipping label via email shortly."
-          : fraudResult.riskLevel === "High"
-            ? "We were unable to process your return automatically. This case has been flagged for review by our support team."
-            : "We need a bit more information before we can process your return. A support specialist may reach out."
+        const summary =
+          fraudResult.riskLevel === "Low"
+            ? "Your return has been approved. You will receive a return shipping label via email shortly."
+            : fraudResult.riskLevel === "High"
+              ? "We were unable to process your return automatically. This case has been flagged for review by our support team."
+              : "We need a bit more information before we can process your return. A support specialist may reach out."
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          from: "bot",
-          component: offlineResult.validatorOutput ? (
-            <ValidationDashboard
-              validatorOutput={offlineResult.validatorOutput}
-              productName={scenario.warranty.product}
-            />
-          ) : (
-            <ReturnFraudCard result={fraudResult} />
-          ),
-          timestamp: now(),
-        },
-        { from: "bot", text: summary, timestamp: now() },
-      ])
-      onStepChange("escalation")
+        setMessages((prev) => [
+          ...prev,
+          {
+            from: "bot",
+            component: offlineResult.validatorOutput ? (
+              <ValidationDashboard
+                validatorOutput={offlineResult.validatorOutput}
+                productName={scenario.warranty.product}
+                catalogMatch={offlineResult.catalogMatch}
+              />
+            ) : (
+              <ReturnFraudCard result={fraudResult} />
+            ),
+            timestamp: now(),
+          },
+          { from: "bot", text: summary, timestamp: now() },
+        ])
+        onStepChange("escalation")
+      })()
     }
   }, [step, selectedScenario, returnOver30, returnEmail, returnOrder, returnReason, returnImageUrl, onStepChange, scenario])
 
@@ -1042,7 +1046,7 @@ export function ChatModal({
           <ValidationDashboard
             validatorOutput={result.validatorOutput}
             productName={scenario.warranty.product}
-            validatorKbData={result.validatorKbData}
+            catalogMatch={result.catalogMatch}
           />
         ))
       }
