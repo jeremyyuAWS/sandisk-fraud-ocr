@@ -16,6 +16,8 @@ import { matchOcrToCatalog, type CatalogMatchResult } from "./product-catalog"
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+const CATALOG_APPROVAL_THRESHOLD = 90
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -370,6 +372,14 @@ export async function runVerificationWorkflow(opts: {
         detail: "Agent response not parseable as JSON, using computed validation",
       }, "validator"))
     }
+    if (valResult.output.overallStatus === "approved" && catalogMatch.matchScore < CATALOG_APPROVAL_THRESHOLD) {
+      valResult.output.overallStatus = "flagged"
+      valResult.output.checks.push({
+        name: "Catalog Match",
+        status: "warn",
+        detail: `Product catalog match ${catalogMatch.matchScore}% is below ${CATALOG_APPROVAL_THRESHOLD}% approval threshold`,
+      })
+    }
     result.validatorOutput = valResult.output
 
     // Step 5: Persist validation result (with OCR input stored alongside)
@@ -509,12 +519,23 @@ export async function runOfflineVerification(scenario: Scenario): Promise<Workfl
 
   const catalogMatch = await matchOcrToCatalog(ocrOutput.raw)
 
+  if (validatorOutput.overallStatus === "approved" && catalogMatch.matchScore < CATALOG_APPROVAL_THRESHOLD) {
+    validatorOutput.overallStatus = "flagged"
+    validatorOutput.checks.push({
+      name: "Catalog Match",
+      status: "warn",
+      detail: `Product catalog match ${catalogMatch.matchScore}% is below ${CATALOG_APPROVAL_THRESHOLD}% approval threshold`,
+    })
+    validationRow.overallStatus = "flagged"
+    validationRow.checks = validatorOutput.checks
+  }
+
   return {
     ocrOutput,
     validatorOutput,
     validationRow,
     catalogMatch,
-    managerSummary: fallbackSummary(overallStatus),
+    managerSummary: fallbackSummary(validatorOutput.overallStatus),
     error: null,
   }
 }
