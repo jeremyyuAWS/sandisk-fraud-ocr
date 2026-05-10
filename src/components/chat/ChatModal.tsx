@@ -503,10 +503,18 @@ function OcrProcessingCard({ filename }: { filename: string }) {
   const [progress, setProgress] = useState(0)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
 
+  const delaysRef = useRef<number[]>([])
+  if (delaysRef.current.length === 0) {
+    const totalTarget = 10000 + Math.random() * 26000
+    const weights = steps.map(() => 0.3 + Math.random() * 2.5)
+    const wSum = weights.reduce((a, b) => a + b, 0)
+    delaysRef.current = weights.map((w) => (w / wSum) * totalTarget)
+  }
+
   useEffect(() => {
     let timeout: ReturnType<typeof setTimeout>
     function scheduleNext(current: number) {
-      const delay = 1400 + Math.random() * 600
+      const delay = delaysRef.current[current] ?? 2000
       timeout = setTimeout(() => {
         if (current < steps.length - 1) {
           setCompletedSteps((prev) => [...prev, current])
@@ -521,12 +529,15 @@ function OcrProcessingCard({ filename }: { filename: string }) {
 
   useEffect(() => {
     const target = steps[stepIdx]?.pct ?? 0
+    const stepDelay = delaysRef.current[stepIdx] ?? 2000
+    const diff = target - progress
+    const tickInterval = diff > 0 ? Math.max(40, stepDelay / diff) : 80
     const tick = setInterval(() => {
       setProgress((p) => {
         if (p >= target) { clearInterval(tick); return target }
         return p + 1
       })
-    }, 80)
+    }, tickInterval)
     return () => clearInterval(tick)
   }, [stepIdx, steps])
 
@@ -873,7 +884,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
 
       try {
         addLog("request", `POST /api/cases/${caseId}/images`, { kind, filename: file.name, mime_type: file.type, size: file.size })
-        const minDelay = new Promise((r) => setTimeout(r, 8000 + Math.random() * 4000))
+        const minDelay = new Promise((r) => setTimeout(r, 10000 + Math.random() * 26000))
         const [result] = await Promise.all([uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file), minDelay])
         addLog("response", `POST /api/cases/${caseId}/images`, result)
         newFiles.push({ file, kind, imageId: result.image_id, previewUrl })
