@@ -8,6 +8,7 @@ const API_BASE =
 export interface HealthResponse {
   ok: boolean
   catalog: { skus: number; drives: number }
+  build?: string
 }
 
 export interface CreateCaseResponse {
@@ -41,13 +42,20 @@ export interface ValidationCheck {
   detail: string
 }
 
+export interface ExtractedImageFields {
+  kind: string
+  filename: string
+  fields: ClassificationField[]
+}
+
 export interface CustomerSummary {
   headline: string
   body: string
   risk_band: "Low" | "Medium" | "High"
   decision: "auto_approve" | "auto_reject" | "human_review"
   checks: ValidationCheck[]
-  warranty: string
+  warranty?: string
+  extracted?: ExtractedImageFields[]
   next_steps: string[]
 }
 

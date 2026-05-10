@@ -13,7 +13,11 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
 
   useEffect(() => {
-    getHealth().catch(() => {})
+    getHealth()
+      .then((h) => {
+        if (h.build) console.info(`[SanDisk] Backend build: ${h.build}`)
+      })
+      .catch(() => {})
   }, [])
 
   const openChat = useCallback(() => {

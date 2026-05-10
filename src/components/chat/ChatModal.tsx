@@ -208,6 +208,32 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
           </>
         )}
 
+        {summary.extracted && summary.extracted.length > 0 && (
+          <>
+            <Separator />
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+              What we read from your uploads
+            </div>
+            <div className="space-y-2">
+              {summary.extracted.map((item, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="text-[10px] text-muted-foreground capitalize">
+                    {item.kind} — {item.filename}
+                  </div>
+                  <div className="grid grid-cols-[80px_1fr] gap-y-0.5 text-[11px]">
+                    {item.fields.map((f, j) => (
+                      <div key={j} className="contents">
+                        <span className="text-muted-foreground">{f.label}</span>
+                        <span className="font-medium text-foreground">{f.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {summary.next_steps && summary.next_steps.length > 0 && (
           <>
             <Separator />
