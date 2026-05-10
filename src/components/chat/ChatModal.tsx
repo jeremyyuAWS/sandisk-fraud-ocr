@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText } from "lucide-react"
+import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -614,6 +614,41 @@ function ImageLightbox({ url, classification, onClose }: { url: string; classifi
   const specs = classification?.specifications ?? []
   const hasData = classification && (classification.fields.length > 0 || specs.length > 0 || classification.extracted_text.length > 0)
 
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [dragging, setDragging] = useState(false)
+  const dragStart = useRef({ x: 0, y: 0 })
+  const panStart = useRef({ x: 0, y: 0 })
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  function handleZoomIn() { setZoom((z) => Math.min(z + 0.5, 5)) }
+  function handleZoomOut() { setZoom((z) => Math.max(z - 0.5, 0.5)) }
+  function handleReset() { setZoom(1); setPan({ x: 0, y: 0 }) }
+
+  function handleWheel(e: React.WheelEvent) {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.2 : 0.2
+    setZoom((z) => Math.min(Math.max(z + delta, 0.5), 5))
+  }
+
+  function handlePointerDown(e: React.PointerEvent) {
+    if (zoom <= 1) return
+    setDragging(true)
+    dragStart.current = { x: e.clientX, y: e.clientY }
+    panStart.current = { ...pan }
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!dragging) return
+    setPan({
+      x: panStart.current.x + (e.clientX - dragStart.current.x),
+      y: panStart.current.y + (e.clientY - dragStart.current.y),
+    })
+  }
+
+  function handlePointerUp() { setDragging(false) }
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -630,20 +665,49 @@ function ImageLightbox({ url, classification, onClose }: { url: string; classifi
               </Badge>
             )}
           </div>
-          <button onClick={onClose} className="p-1 hover:opacity-70">
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleZoomOut} title="Zoom out">
+              <ZoomOut className="h-3.5 w-3.5" />
+            </Button>
+            <span className="text-xs font-mono text-muted-foreground w-10 text-center">{Math.round(zoom * 100)}%</span>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleZoomIn} title="Zoom in">
+              <ZoomIn className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleReset} title="Reset zoom">
+              <RotateCcw className="h-3.5 w-3.5" />
+            </Button>
+            <div className="w-px h-4 bg-border mx-1" />
+            <button onClick={onClose} className="p-1 hover:opacity-70">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-hidden">
           <div className={`flex h-full ${hasData ? "" : "justify-center"}`}>
-            {/* Left: Image */}
-            <div className={`flex-1 min-w-0 p-4 overflow-auto flex items-start justify-center ${hasData ? "border-r border-border" : ""}`}>
+            {/* Left: Zoomable Image */}
+            <div
+              ref={containerRef}
+              className={`flex-1 min-w-0 overflow-hidden flex items-center justify-center relative ${hasData ? "border-r border-border" : ""} ${zoom > 1 ? "cursor-grab" : ""} ${dragging ? "cursor-grabbing" : ""}`}
+              onWheel={handleWheel}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+            >
               <img
                 src={url}
                 alt="Uploaded document"
-                className="max-h-[70vh] max-w-full w-auto rounded-lg border border-border object-contain"
+                draggable={false}
+                className="max-h-[70vh] max-w-full w-auto rounded-lg border border-border object-contain select-none transition-transform duration-100"
+                style={{
+                  transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                }}
               />
+              {zoom > 1 && (
+                <div className="absolute bottom-3 left-3 bg-background/80 backdrop-blur-sm rounded-md px-2 py-1 text-[10px] text-muted-foreground border border-border">
+                  Scroll to zoom. Drag to pan.
+                </div>
+              )}
             </div>
 
             {/* Right: OCR output in monospace */}
