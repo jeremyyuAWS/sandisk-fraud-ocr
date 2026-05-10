@@ -708,7 +708,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
 
   const modalClass = expanded
     ? "fixed inset-4 z-50 flex flex-col rounded-2xl shadow-2xl border border-border bg-background"
-    : "fixed bottom-6 right-6 z-50 flex flex-col w-[400px] h-[600px] rounded-2xl shadow-2xl border border-border bg-background"
+    : "fixed bottom-6 right-6 z-50 flex flex-col w-[480px] h-[700px] rounded-2xl shadow-2xl border border-border bg-background"
 
   return (
     <div className={modalClass}>
