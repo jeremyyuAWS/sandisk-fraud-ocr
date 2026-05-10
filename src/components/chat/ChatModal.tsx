@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText } from "lucide-react"
+import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -14,6 +14,7 @@ import {
   type ValidateResponse,
   type CustomerSummary,
   type ValidationCheck,
+  type Classification,
 } from "@/lib/api"
 
 // ---------------------------------------------------------------------------
@@ -229,6 +230,78 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
 }
 
 // ---------------------------------------------------------------------------
+// Classification card (shown after upload)
+// ---------------------------------------------------------------------------
+
+function ClassificationCard({ classification }: { classification: Classification }) {
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const TypeIcon = classification.type === "invoice" || classification.type === "transcript"
+    ? Receipt
+    : Package
+
+  return (
+    <Card className="border border-border">
+      <CardContent className="p-3 space-y-2">
+        <div className="flex items-start gap-2">
+          <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+          <p className="text-xs text-foreground leading-relaxed">{classification.chat_message}</p>
+        </div>
+
+        {classification.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {classification.tags.map((tag, i) => (
+              <Badge key={i} variant="outline" className="text-[9px] py-0 px-1.5 font-normal">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {(classification.fields.length > 0 || classification.extracted_text.length > 0) && (
+          <button
+            onClick={() => setDetailsOpen(!detailsOpen)}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            {detailsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {detailsOpen ? "Hide details" : "Show details"}
+          </button>
+        )}
+
+        {detailsOpen && (
+          <div className="space-y-2 pt-1">
+            {classification.fields.length > 0 && (
+              <div className="grid grid-cols-[80px_1fr] gap-y-1 text-[11px]">
+                {classification.fields.map((f, i) => (
+                  <div key={i} className="contents">
+                    <span className="text-muted-foreground">{f.label}</span>
+                    <span className="font-medium text-foreground">{f.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {classification.extracted_text.length > 0 && (
+              <>
+                <Separator />
+                <div className="space-y-1">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Extracted Text
+                  </div>
+                  <div className="text-[11px] text-muted-foreground space-y-0.5 font-mono">
+                    {classification.extracted_text.map((t, i) => (
+                      <div key={i}>{t}</div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Validating spinner
 // ---------------------------------------------------------------------------
 
@@ -244,8 +317,8 @@ function ValidatingSpinner() {
         <div className="flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           <div className="space-y-1">
-            <div className="text-xs text-foreground">Analyzing your images with AI vision...</div>
-            <div className="text-xs text-muted-foreground">This may take 15-30 seconds.</div>
+            <div className="text-xs text-foreground">Running verification checks...</div>
+            <div className="text-xs text-muted-foreground">This usually takes a few seconds.</div>
           </div>
         </div>
         <Progress value={50} className="h-2 animate-pulse" />
@@ -341,7 +414,11 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       try {
         const result = await uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file)
         newFiles.push({ file, kind, imageId: result.image_id, previewUrl })
-        addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
+        if (result.classification) {
+          addComponent("bot", <ClassificationCard classification={result.classification} />)
+        } else {
+          addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
+        }
       } catch {
         addMsg("bot", `Failed to upload ${file.name}. Please try again.`)
       }

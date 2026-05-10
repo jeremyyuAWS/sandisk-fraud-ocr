@@ -14,10 +14,25 @@ export interface CreateCaseResponse {
   case_id: string
 }
 
+export interface ClassificationField {
+  label: string
+  value: string
+}
+
+export interface Classification {
+  type: "product_image" | "label_serial" | "packaging" | "invoice" | "transcript" | "unknown"
+  chat_message: string
+  description: string
+  tags: string[]
+  extracted_text: string[]
+  fields: ClassificationField[]
+}
+
 export interface UploadImageResponse {
   image_id: string
   kind: string
   filename: string
+  classification?: Classification
 }
 
 export interface ValidationCheck {
