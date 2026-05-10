@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp } from "lucide-react"
+import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -16,6 +16,17 @@ import {
   type ValidationCheck,
   type Classification,
 } from "@/lib/api"
+
+// ---------------------------------------------------------------------------
+// Session log entry type
+// ---------------------------------------------------------------------------
+
+interface LogEntry {
+  timestamp: string
+  direction: "request" | "response"
+  endpoint: string
+  data: unknown
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -562,81 +573,80 @@ function ClickableImagePreview({ url, filename, onClick }: { url: string; filena
 // ---------------------------------------------------------------------------
 
 function ImageLightbox({ url, classification, onClose }: { url: string; classification?: Classification; onClose: () => void }) {
+  const hasOcr = classification && (classification.fields.length > 0 || classification.extracted_text.length > 0)
+
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="relative bg-background rounded-2xl shadow-2xl border border-border max-w-[900px] max-h-[85vh] w-[90vw] overflow-hidden flex flex-col"
+        className="relative bg-background rounded-2xl shadow-2xl border border-border max-w-[1000px] max-h-[85vh] w-[92vw] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <span className="text-sm font-semibold text-foreground">Image Preview & OCR Results</span>
+          <div className="flex items-center gap-2">
+            <ScanSearch className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">Image & OCR Extraction</span>
+            {classification && (
+              <Badge variant="outline" className="text-[10px] ml-2">
+                {classification.type.replace("_", " ")}
+              </Badge>
+            )}
+          </div>
           <button onClick={onClose} className="p-1 hover:opacity-70">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-4">
-          <div className={`flex gap-6 ${classification?.fields.length ? "" : "justify-center"}`}>
-            <div className="shrink-0">
+        <div className="flex-1 overflow-hidden">
+          <div className={`flex h-full ${hasOcr ? "" : "justify-center"}`}>
+            {/* Left: Image */}
+            <div className="flex-1 min-w-0 p-4 overflow-auto flex items-start justify-center border-r border-border">
               <img
                 src={url}
                 alt="Uploaded document"
-                className="max-h-[65vh] max-w-[400px] w-auto rounded-lg border border-border object-contain"
+                className="max-h-[70vh] max-w-full w-auto rounded-lg border border-border object-contain"
               />
             </div>
 
-            {classification && classification.fields.length > 0 && (
-              <div className="flex-1 min-w-[250px] space-y-4">
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Document Type
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {classification.type.replace("_", " ")}
-                  </Badge>
+            {/* Right: OCR output in monospace */}
+            {hasOcr && (
+              <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+                <div className="px-4 pt-3 pb-2 border-b border-border">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Extracted Data
+                  </span>
                 </div>
-
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Extracted Fields
-                  </div>
-                  <div className="space-y-2">
-                    {classification.fields.map((f, i) => (
-                      <div key={i} className="flex justify-between items-baseline gap-3 py-1 border-b border-border last:border-0">
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">{f.label}</span>
-                        <span className="text-sm font-medium text-foreground text-right">{f.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {classification.tags.length > 0 && (
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                      Tags
+                <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-muted/30">
+                  {classification!.fields.length > 0 && (
+                    <div className="space-y-1 mb-4">
+                      <div className="text-muted-foreground mb-2">--- FIELDS ---</div>
+                      {classification!.fields.map((f, i) => {
+                        const padded = (f.label + ":").padEnd(18, " ")
+                        return (
+                          <div key={i} className="text-foreground whitespace-pre">
+                            <span className="text-muted-foreground">{padded}</span>
+                            <span className="font-medium">{f.value}</span>
+                          </div>
+                        )
+                      })}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {classification.tags.map((tag, i) => (
-                        <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 font-normal">
-                          {tag}
-                        </Badge>
+                  )}
+
+                  {classification!.tags.length > 0 && (
+                    <div className="space-y-1 mb-4">
+                      <div className="text-muted-foreground mb-1">--- TAGS ---</div>
+                      <div className="text-foreground">{classification!.tags.join(", ")}</div>
+                    </div>
+                  )}
+
+                  {classification!.extracted_text.length > 0 && (
+                    <div className="space-y-0.5">
+                      <div className="text-muted-foreground mb-1">--- RAW OCR ---</div>
+                      {classification!.extracted_text.map((t, i) => (
+                        <div key={i} className="text-foreground/80">{t}</div>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {classification.extracted_text.length > 0 && (
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                      Raw OCR Text
-                    </div>
-                    <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded-md p-3 max-h-[200px] overflow-y-auto space-y-0.5">
-                      {classification.extracted_text.map((t, i) => (
-                        <div key={i}>{t}</div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -658,8 +668,15 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>>([])
   const [validationResult, setValidationResult] = useState<ValidateResponse | null>(null)
   const [lightbox, setLightbox] = useState<{ url: string; classification?: Classification } | null>(null)
+  const [activeTab, setActiveTab] = useState<"chat" | "logs">("chat")
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
+  const logsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function addLog(direction: "request" | "response", endpoint: string, data: unknown) {
+    setLogs((prev) => [...prev, { timestamp: new Date().toISOString(), direction, endpoint, data }])
+  }
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -699,11 +716,14 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     addMsg("user", labels[issueType])
 
     try {
+      addLog("request", "POST /api/cases", { issue_type: issueType })
       const { case_id } = await createCase(issueType)
+      addLog("response", "POST /api/cases", { case_id })
       setCaseId(case_id)
       addMsg("bot", "I've opened a case for you. Please upload photos of your product. You can include:\n\n- **Product photo** (front/back)\n- **Label photo** (serial number, model)\n- **Packaging** (if available)\n- **Proof of purchase** (receipt/invoice, PDF accepted)\n\nUpload at least one product or label photo, then click **Run Verification**.")
       setStep("image-upload")
-    } catch {
+    } catch (err) {
+      addLog("response", "POST /api/cases", { error: String(err) })
       addMsg("bot", "I'm sorry, there was an error creating your case. Please try again.")
     }
   }
@@ -734,7 +754,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
 
       try {
+        addLog("request", `POST /api/cases/${caseId}/images`, { kind, filename: file.name, mime_type: file.type, size: file.size })
         const result = await uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file)
+        addLog("response", `POST /api/cases/${caseId}/images`, result)
         newFiles.push({ file, kind, imageId: result.image_id, previewUrl })
         // Remove processing card and show classification
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
@@ -743,7 +765,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         } else {
           addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
         }
-      } catch {
+      } catch (err) {
+        addLog("response", `POST /api/cases/${caseId}/images`, { error: String(err) })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         addMsg("bot", `Failed to upload ${file.name}. Please try again.`)
       }
@@ -770,14 +793,17 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     addComponent("bot", <ValidatingSpinner />)
 
     try {
+      addLog("request", `POST /api/cases/${caseId}/validate`, { case_id: caseId })
       const result = await validateCase(caseId)
+      addLog("response", `POST /api/cases/${caseId}/validate`, result)
       setValidationResult(result)
       setMessages((prev) => {
         const without = prev.filter((_, i) => i !== spinnerIdx)
         return [...without, { from: "bot" as const, component: <ValidationResultCard summary={result.customer_summary} />, timestamp: now() }]
       })
       setStep("result")
-    } catch {
+    } catch (err) {
+      addLog("response", `POST /api/cases/${caseId}/validate`, { error: String(err) })
       setMessages((prev) => prev.filter((_, i) => i !== spinnerIdx))
       addMsg("bot", "I'm sorry, the verification timed out or encountered an error. Please try again or contact us directly.")
       setStep("upload-preview")
@@ -787,11 +813,14 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   async function handleEscalate() {
     if (!caseId) return
     try {
-      await escalateCase(caseId)
+      addLog("request", `POST /api/cases/${caseId}/escalate`, { case_id: caseId })
+      const result = await escalateCase(caseId)
+      addLog("response", `POST /api/cases/${caseId}/escalate`, result)
       addMsg("bot", "Your case has been escalated to a specialist for review. They will follow up with you shortly.")
       setStep("escalated")
       onEscalate()
-    } catch {
+    } catch (err) {
+      addLog("response", `POST /api/cases/${caseId}/escalate`, { error: String(err) })
       addMsg("bot", "We couldn't escalate right now. Please try again.")
     }
   }
@@ -802,6 +831,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     setCaseId(null)
     setUploadedFiles([])
     setValidationResult(null)
+    setLogs([])
+    setActiveTab("chat")
     setTimeout(() => {
       setMessages([{ from: "bot", text: "Hello! Welcome to SanDisk Support. How can I help you today?", timestamp: now() }])
       setStep("issue-select")
@@ -847,15 +878,63 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         </div>
       </div>
 
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      {/* Tab switcher */}
+      <div className="px-4 pt-2 pb-0 shrink-0 border-b border-border">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setActiveTab("chat")}
+            className={`px-3 py-1.5 text-xs font-medium rounded-t-md border-b-2 transition-colors ${activeTab === "chat" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            Chat
+          </button>
+          <button
+            onClick={() => setActiveTab("logs")}
+            className={`px-3 py-1.5 text-xs font-medium rounded-t-md border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === "logs" ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <ScrollText className="h-3 w-3" />
+            Logs
+            {logs.length > 0 && (
+              <span className="bg-muted text-muted-foreground text-[9px] px-1.5 py-0.5 rounded-full">{logs.length}</span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Chat Messages */}
+      <div ref={scrollRef} className={`flex-1 overflow-y-auto px-4 py-4 space-y-4 ${activeTab !== "chat" ? "hidden" : ""}`}>
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} expanded={expanded} />
         ))}
       </div>
 
-      {/* Bottom action area */}
-      <div className="px-4 py-3 border-t border-border shrink-0 space-y-2">
+      {/* Logs Panel */}
+      <div ref={logsRef} className={`flex-1 overflow-y-auto ${activeTab !== "logs" ? "hidden" : ""}`}>
+        {logs.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+            No API calls recorded yet. Start a conversation to see logs.
+          </div>
+        ) : (
+          <div className="p-3 space-y-2">
+            {logs.map((entry, i) => (
+              <div key={i} className="border border-border rounded-md overflow-hidden">
+                <div className={`flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono ${entry.direction === "request" ? "bg-muted/50" : "bg-muted/30"}`}>
+                  <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${entry.direction === "request" ? "text-blue-600 border-blue-300" : "text-green-600 border-green-300"}`}>
+                    {entry.direction === "request" ? "REQ" : "RES"}
+                  </Badge>
+                  <span className="text-muted-foreground">{entry.endpoint}</span>
+                  <span className="ml-auto text-muted-foreground/60">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                </div>
+                <pre className="px-3 py-2 text-[10px] font-mono text-foreground/80 overflow-x-auto bg-background max-h-[150px] overflow-y-auto">
+                  {JSON.stringify(entry.data, null, 2)}
+                </pre>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom action area (chat tab only) */}
+      <div className={`px-4 py-3 border-t border-border shrink-0 space-y-2 ${activeTab !== "chat" ? "hidden" : ""}`}>
         {step === "issue-select" && (
           <div className="flex flex-wrap gap-2">
             <QuickChip label="Warranty Verification" onClick={() => handleIssueSelect("warranty")} />
