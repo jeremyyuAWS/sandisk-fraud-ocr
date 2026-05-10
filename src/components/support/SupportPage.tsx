@@ -14,19 +14,13 @@ const supportTopics = [
 ]
 
 interface SupportPageProps {
-  settingsPanel?: React.ReactNode
-  settingsOpen?: boolean
-  onSettingsToggle?: () => void
-  logCount?: number
-  onLogsOpen?: () => void
-  onOcrTestOpen?: () => void
-  onValidatorTestOpen?: () => void
+  onAgentConsole?: () => void
 }
 
-export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle, logCount, onLogsOpen, onOcrTestOpen, onValidatorTestOpen }: SupportPageProps) {
+export function SupportPage({ onAgentConsole }: SupportPageProps) {
   return (
     <div className="min-h-screen bg-background">
-      <Header settingsPanel={settingsPanel} settingsOpen={settingsOpen} onSettingsToggle={onSettingsToggle} logCount={logCount} onLogsOpen={onLogsOpen} onOcrTestOpen={onOcrTestOpen} onValidatorTestOpen={onValidatorTestOpen} />
+      <Header onAgentConsole={onAgentConsole} />
       <HeroBanner />
       <SupportCategories />
       <section className="py-12 px-8 max-w-5xl mx-auto">
@@ -56,7 +50,7 @@ export function SupportPage({ settingsPanel, settingsOpen, onSettingsToggle, log
       <BusinessImpact />
       <footer className="bg-background border-t border-border py-6 px-8 text-center">
         <p className="text-xs text-muted-foreground">
-          SanDisk Fraudulent Returns OCR Concept Demo &mdash; For demonstration purposes only
+          SanDisk Warranty OCR Verification Demo &mdash; Powered by Azure AI
         </p>
       </footer>
     </div>

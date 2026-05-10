@@ -1,27 +1,33 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Bot, Image as ImageIcon, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, RotateCcw, ScanSearch, Activity, Shuffle } from "lucide-react"
-import { createLogEntry, type LogEntry } from "@/data/agent-logs"
+import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
-import type { ChatStep } from "@/data/app-state"
-import { scenarios, type Scenario } from "@/data/scenarios"
-import type { LyzrAgentConfig } from "@/data/lyzr-config"
+import { Progress } from "@/components/ui/progress"
 import { MarkdownMessage } from "./MarkdownMessage"
-import { LyzrResponseCard, tryParseLyzrResponse } from "./LyzrResponseCard"
-import { AgentActivityFeed } from "./AgentActivityFeed"
-import { useLyzrWebSocket, type RawWsEvent } from "@/hooks/useLyzrWebSocket"
-import { parseValidationFromResponse, normalizeChecks, persistValidationResult, type ValidationResultRow } from "@/data/validation-results"
-import { runVerificationWorkflow, runOfflineVerification, type WorkflowProgress } from "@/data/workflow"
-import { WorkflowProgressBar, ValidationDashboard } from "./ValidationDashboard"
+import {
+  createCase,
+  uploadImage,
+  validateCase,
+  escalateCase,
+  type ValidateResponse,
+  type CustomerSummary,
+  type ValidationCheck,
+} from "@/lib/api"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+type ChatStep =
+  | "welcome"
+  | "issue-select"
+  | "image-upload"
+  | "upload-preview"
+  | "validating"
+  | "result"
+  | "escalated"
 
 interface ChatMessage {
   from: "bot" | "user"
@@ -32,18 +38,8 @@ interface ChatMessage {
 
 interface ChatModalProps {
   open: boolean
-  step: ChatStep
-  selectedScenario: string
   onClose: () => void
-  onStepChange: (step: ChatStep) => void
   onEscalate: () => void
-  onImageUploaded?: (url: string) => void
-  lyzrConfig: LyzrAgentConfig
-  isLyzrConfigured: boolean
-  onResetSession: () => { sessionId: string; userId: string }
-  onAddLog: (log: LogEntry) => void
-  onRawWsEvent?: (event: RawWsEvent) => void
-  onValidationResult?: (result: ValidationResultRow) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +85,7 @@ function RedChip({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// Message Bubble — matches the SanDisk screenshot style
+// Message Bubble
 // ---------------------------------------------------------------------------
 
 function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean }) {
@@ -131,363 +127,95 @@ function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean 
 }
 
 // ---------------------------------------------------------------------------
-// Warranty / OCR cards
+// Validation Result Card (renders customer_summary)
 // ---------------------------------------------------------------------------
 
-function WarrantyCard({ scenario }: { scenario: Scenario }) {
-  const w = scenario.warranty
+function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
+  const Icon =
+    summary.decision === "auto_approve" ? ShieldCheck
+    : summary.decision === "auto_reject" ? ShieldAlert
+    : ShieldQuestion
+  const iconColor =
+    summary.decision === "auto_approve" ? "text-green-600"
+    : summary.decision === "auto_reject" ? "text-red-500"
+    : "text-amber-500"
+  const bandColor =
+    summary.risk_band === "Low"
+      ? "bg-green-50 text-green-700 border-green-200"
+      : summary.risk_band === "High"
+        ? "bg-red-50 text-red-700 border-red-200"
+        : "bg-amber-50 text-amber-700 border-amber-200"
+
   return (
     <Card className="border border-border">
-      <CardContent className="p-3 space-y-2 text-xs">
-        <div className="font-semibold text-sm">{w.product}</div>
-        <Separator />
-        <div className="grid grid-cols-2 gap-y-1.5">
-          <span className="text-muted-foreground">Serial Number</span>
-          <span className="font-mono">{w.serialNumber}</span>
-          <span className="text-muted-foreground">Registration</span>
-          <span>{w.registered ? "Registered" : "Not Registered"}</span>
-          <span className="text-muted-foreground">Warranty Status</span>
-          <Badge variant="outline" className="w-fit bg-green-50 text-green-700 border-green-200">
-            {w.status}
+      <CardContent className="p-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className={`h-5 w-5 ${iconColor}`} />
+            <span className="text-sm font-semibold text-foreground">{summary.headline}</span>
+          </div>
+          <Badge variant="outline" className={`text-xs font-bold ${bandColor}`}>
+            {summary.risk_band} Risk
           </Badge>
-          <span className="text-muted-foreground">Purchase Date</span>
-          <span>{w.purchaseDate}</span>
-          <span className="text-muted-foreground">Prior Claims</span>
-          <span className={w.priorClaims > 1 ? "text-sandisk-red font-semibold" : ""}>
-            {w.priorClaims}
-          </span>
-          <span className="text-muted-foreground">Eligible</span>
-          <span>{w.replacementEligible ? "Yes" : "No"}</span>
         </div>
-      </CardContent>
-    </Card>
-  )
-}
 
-function OcrResultCard({ scenario }: { scenario: Scenario }) {
-  const { ocr, risk } = scenario
-  const riskColor =
-    risk.level === "Low"
-      ? "bg-green-50 text-green-700 border-green-200"
-      : risk.level === "High"
-        ? "bg-red-50 text-red-700 border-red-200"
-        : "bg-amber-50 text-amber-700 border-amber-200"
-
-  return (
-    <Card className="border border-border">
-      <CardContent className="p-3 space-y-3 text-xs">
-        <div className="font-semibold text-sm">AI Verification Result</div>
         <Separator />
-        <div>
-          <div className="text-muted-foreground mb-1">OCR Extracted Fields</div>
-          <div className="grid grid-cols-2 gap-y-1">
-            <span className="text-muted-foreground">Brand</span>
-            <span>{ocr.brandDetected}</span>
-            <span className="text-muted-foreground">Product</span>
-            <span>{ocr.productText}</span>
-            <span className="text-muted-foreground">Capacity</span>
-            <span>{ocr.capacityDetected}</span>
-            <span className="text-muted-foreground">Serial (Image)</span>
-            <span className="font-mono">{ocr.serialDetected}</span>
-            <span className="text-muted-foreground">Image Quality</span>
-            <span>{ocr.imageQuality}</span>
-          </div>
-        </div>
+
+        <p className="text-xs text-muted-foreground">{summary.body}</p>
+
         <Separator />
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Fraud Risk Score</span>
-          <div className="flex items-center gap-2">
-            <Progress value={risk.score} className="w-20 h-2" />
-            <span className="font-semibold">{risk.score}/100</span>
-          </div>
+
+        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+          Verification Checks
         </div>
-        <Badge variant="outline" className={`w-fit ${riskColor}`}>
-          {risk.level} Risk
-        </Badge>
-        {risk.reasonCodes.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-muted-foreground">Findings:</div>
-            <ul className="space-y-0.5 pl-3">
-              {risk.reasonCodes.map((r, i) => (
-                <li key={i} className="list-disc text-foreground">{r}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Return fraud result card
-// ---------------------------------------------------------------------------
-
-interface ReturnFraudResult {
-  riskLevel: "Low" | "Medium" | "High"
-  score: number
-  productMatch: boolean
-  orderValid: boolean
-  imageAuthentic: boolean
-  findings: string[]
-  recommendation: string
-}
-
-function ReturnFraudCard({ result }: { result: ReturnFraudResult }) {
-  const Icon = result.riskLevel === "Low" ? ShieldCheck : result.riskLevel === "High" ? ShieldAlert : ShieldQuestion
-  const iconColor = result.riskLevel === "Low" ? "text-green-600" : result.riskLevel === "High" ? "text-red-600" : "text-amber-600"
-  const riskColor =
-    result.riskLevel === "Low"
-      ? "bg-green-50 text-green-700 border-green-200"
-      : result.riskLevel === "High"
-        ? "bg-red-50 text-red-700 border-red-200"
-        : "bg-amber-50 text-amber-700 border-amber-200"
-
-  return (
-    <Card className="border border-border">
-      <CardContent className="p-3 space-y-3 text-xs">
-        <div className="flex items-center gap-2">
-          <Icon className={`h-5 w-5 ${iconColor}`} />
-          <span className="font-semibold text-sm">Return Fraud Analysis</span>
-        </div>
-        <Separator />
-        <div className="flex items-center justify-between">
-          <span className="text-muted-foreground">Risk Score</span>
-          <div className="flex items-center gap-2">
-            <Progress value={result.score} className="w-20 h-2" />
-            <span className="font-semibold">{result.score}/100</span>
-          </div>
-        </div>
-        <Badge variant="outline" className={`w-fit ${riskColor}`}>
-          {result.riskLevel} Risk
-        </Badge>
-        <Separator />
         <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            {result.productMatch ? <CircleCheck className="h-3.5 w-3.5 text-green-600" /> : <TriangleAlert className="h-3.5 w-3.5 text-red-600" />}
-            <span>Product image {result.productMatch ? "matches" : "does NOT match"} order</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {result.orderValid ? <CircleCheck className="h-3.5 w-3.5 text-green-600" /> : <TriangleAlert className="h-3.5 w-3.5 text-red-600" />}
-            <span>Order number {result.orderValid ? "verified" : "could not be verified"}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            {result.imageAuthentic ? <CircleCheck className="h-3.5 w-3.5 text-green-600" /> : <TriangleAlert className="h-3.5 w-3.5 text-red-600" />}
-            <span>Image {result.imageAuthentic ? "appears authentic" : "flagged as suspicious"}</span>
-          </div>
-        </div>
-        {result.findings.length > 0 && (
-          <>
-            <Separator />
-            <div className="space-y-1">
-              <div className="text-muted-foreground font-medium">Findings</div>
-              <ul className="space-y-0.5 pl-3">
-                {result.findings.map((f, i) => (
-                  <li key={i} className="list-disc">{f}</li>
-                ))}
-              </ul>
-            </div>
-          </>
-        )}
-        <Separator />
-        <div>
-          <div className="text-muted-foreground font-medium mb-0.5">Recommendation</div>
-          <div className="font-medium">{result.recommendation}</div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Welcome screen
-// ---------------------------------------------------------------------------
-
-function WelcomeScreen() {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center px-8 gap-4">
-      <img
-        src="/sandisk-chat-image.png"
-        alt="Welcome, We're here to help"
-        className="w-72 h-auto"
-      />
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Lyzr integration
-// ---------------------------------------------------------------------------
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-async function sendToLyzr(
-  config: LyzrAgentConfig,
-  message: string,
-  imageBase64?: string
-): Promise<{ response?: string; error?: string; session_id?: string }> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/lyzr-chat`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      apiKey: config.apiKey,
-      agentId: config.agentId,
-      userId: config.userId,
-      sessionId: config.sessionId,
-      message,
-      ...(imageBase64 ? { imageBase64 } : {}),
-    }),
-  })
-  const text = await res.text()
-  try {
-    return JSON.parse(text)
-  } catch {
-    return { error: text || `Request failed with status ${res.status}` }
-  }
-}
-
-function compressImage(file: File, maxWidth = 800, quality = 0.7): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      URL.revokeObjectURL(img.src)
-      let { width, height } = img
-      if (width > maxWidth) {
-        height = Math.round((height * maxWidth) / width)
-        width = maxWidth
-      }
-      const canvas = document.createElement("canvas")
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext("2d")!
-      ctx.drawImage(img, 0, 0, width, height)
-      const dataUrl = canvas.toDataURL("image/jpeg", quality)
-      resolve(dataUrl.split(",")[1])
-    }
-    img.onerror = reject
-    img.src = URL.createObjectURL(file)
-  })
-}
-
-function ImagePreview({ src, alt }: { src: string; alt: string }) {
-  return (
-    <div className="rounded-lg overflow-hidden border border-border">
-      <img src={src} alt={alt} className="w-full h-auto max-h-40 object-cover" />
-    </div>
-  )
-}
-
-function tryExtractJson(text: string): Record<string, unknown> | null {
-  try {
-    const obj = JSON.parse(text)
-    if (obj && typeof obj === "object") return obj
-  } catch { /* ignore */ }
-  const match = text.match(/\{[\s\S]*\}/)
-  if (match) {
-    try {
-      const obj = JSON.parse(match[0])
-      if (obj && typeof obj === "object") return obj
-    } catch { /* ignore */ }
-  }
-  return null
-}
-
-function JsonResponseCard({ data }: { data: Record<string, unknown> }) {
-  return (
-    <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
-      <div className="px-3 py-1.5 border-b border-border bg-muted/50">
-        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Agent Response</span>
-      </div>
-      <pre className="px-3 py-2 text-xs font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap break-words">
-        {JSON.stringify(data, null, 2)}
-      </pre>
-    </div>
-  )
-}
-
-function formatAnalysisKey(key: string): string {
-  return key
-    .replace(/[_-]/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-}
-
-function ImageAnalysisCard({ data }: { data: Record<string, unknown> }) {
-  const entries = Object.entries(data).filter(([, v]) => v != null && v !== "")
-
-  const riskLevel = (data.riskLevel || data.risk_level || data.riskAssessment) as string | undefined
-  const riskScore = (data.riskScore || data.risk_score || data.fraudScore || data.fraud_score) as number | undefined
-  const riskColor = riskLevel
-    ? riskLevel.toString().toLowerCase().includes("low")
-      ? "bg-green-50 text-green-700 border-green-200"
-      : riskLevel.toString().toLowerCase().includes("high")
-        ? "bg-red-50 text-red-700 border-red-200"
-        : "bg-amber-50 text-amber-700 border-amber-200"
-    : null
-
-  const regularEntries = entries.filter(([k]) =>
-    !["riskLevel", "risk_level", "riskScore", "risk_score", "riskAssessment", "fraudScore", "fraud_score", "reasonCodes", "reason_codes", "flags", "findings"].includes(k)
-  )
-  const listField = (data.reasonCodes || data.reason_codes || data.flags || data.findings) as string[] | undefined
-
-  return (
-    <Card className="border border-border">
-      <CardContent className="p-3 space-y-3 text-xs">
-        <div className="flex items-center gap-2">
-          <ScanSearch className="h-4 w-4 text-muted-foreground" />
-          <span className="font-semibold text-sm">Image Analysis Result</span>
-        </div>
-        <Separator />
-        <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
-          {regularEntries.map(([key, val]) => {
-            if (typeof val === "object") return null
+          {summary.checks.map((check: ValidationCheck, i: number) => {
+            const color =
+              check.result === "Passed" ? "text-green-600"
+              : check.result === "Failed" ? "text-red-500"
+              : "text-amber-500"
+            const CheckIcon =
+              check.result === "Passed" ? CircleCheck
+              : check.result === "Failed" ? TriangleAlert
+              : Clock
             return (
-              <div key={key} className="contents">
-                <span className="text-muted-foreground">{formatAnalysisKey(key)}</span>
-                <span className={key.toLowerCase().includes("serial") ? "font-mono" : ""}>{String(val)}</span>
+              <div key={i} className="flex items-start gap-2">
+                <CheckIcon className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${color}`} />
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs font-medium text-foreground">{check.name}</span>
+                  {check.detail && (
+                    <span className="text-xs text-muted-foreground ml-1.5">{check.detail}</span>
+                  )}
+                </div>
               </div>
             )
           })}
         </div>
-        {(riskLevel || riskScore != null) && (
+
+        {summary.warranty && (
           <>
             <Separator />
-            <div className="flex items-center gap-2">
-              {riskColor && (
-                <Badge variant="outline" className={`text-[10px] ${riskColor}`}>
-                  {String(riskLevel)} Risk
-                </Badge>
-              )}
-              {riskScore != null && (
-                <div className="flex items-center gap-1.5">
-                  <Progress value={Number(riskScore)} className="w-16 h-2" />
-                  <span className="font-semibold">{riskScore}/100</span>
-                </div>
-              )}
+            <div className="text-xs">
+              <span className="text-muted-foreground">Warranty: </span>
+              <span className="font-medium text-foreground">{summary.warranty}</span>
             </div>
           </>
         )}
-        {listField && Array.isArray(listField) && listField.length > 0 && (
+
+        {summary.next_steps && summary.next_steps.length > 0 && (
           <>
             <Separator />
-            <div className="space-y-1">
-              <div className="text-muted-foreground font-medium">Findings</div>
-              {listField.map((item, i) => {
-                const isGood = String(item).toUpperCase().includes("SUCCESS") || String(item).toUpperCase().includes("VALID")
-                return (
-                  <div key={i} className="flex items-center gap-1.5">
-                    {isGood
-                      ? <CircleCheck className="h-3 w-3 text-green-600 shrink-0" />
-                      : <TriangleAlert className="h-3 w-3 text-amber-500 shrink-0" />}
-                    <span>{String(item)}</span>
-                  </div>
-                )
-              })}
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+              Next Steps
             </div>
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {summary.next_steps.map((step, i) => (
+                <li key={i} className="flex items-start gap-1.5">
+                  <span className="text-foreground font-medium">{i + 1}.</span>
+                  {step}
+                </li>
+              ))}
+            </ul>
           </>
         )}
       </CardContent>
@@ -495,303 +223,62 @@ function ImageAnalysisCard({ data }: { data: Record<string, unknown> }) {
   )
 }
 
-function ImageAnalysisTextCard({ text }: { text: string }) {
-  const lines = text.split("\n").filter(Boolean)
-  const hasStructure = lines.length > 1
+// ---------------------------------------------------------------------------
+// Validating spinner
+// ---------------------------------------------------------------------------
 
-  if (!hasStructure) {
-    return (
-      <Card className="border border-border">
-        <CardContent className="p-3 space-y-2 text-xs">
-          <div className="flex items-center gap-2">
-            <ScanSearch className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold text-sm">Image Analysis Result</span>
-          </div>
-          <Separator />
-          <div className="text-sm leading-relaxed">
-            <MarkdownMessage content={text} />
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
+function ValidatingSpinner() {
   return (
     <Card className="border border-border">
-      <CardContent className="p-3 space-y-2 text-xs">
+      <CardContent className="p-3 space-y-3">
         <div className="flex items-center gap-2">
           <ScanSearch className="h-4 w-4 text-muted-foreground" />
-          <span className="font-semibold text-sm">Image Analysis Result</span>
+          <span className="text-sm font-semibold text-foreground">Verification in progress</span>
         </div>
         <Separator />
-        <div className="text-sm leading-relaxed space-y-1">
-          <MarkdownMessage content={text} />
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="space-y-1">
+            <div className="text-xs text-foreground">Analyzing your images with AI vision...</div>
+            <div className="text-xs text-muted-foreground">This may take 15-30 seconds.</div>
+          </div>
         </div>
+        <Progress value={50} className="h-2 animate-pulse" />
       </CardContent>
     </Card>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Return fraud scenario engine
+// Main ChatModal
 // ---------------------------------------------------------------------------
 
-function evaluateReturnFraud(
-  scenarioId: string,
-  orderOver30: boolean,
-  _email: string,
-  _orderNumber: string,
-  reason: string,
-  uploadedImageUrl: string | null
-): ReturnFraudResult {
-  const isSSD = uploadedImageUrl?.includes("sandisk-ssd")
-  const isXtreme = uploadedImageUrl?.includes("xtreme")
-  const lowerReason = reason.toLowerCase()
-  const mentionsDefect = lowerReason.includes("defect") || lowerReason.includes("broken") || lowerReason.includes("not working") || lowerReason.includes("damage")
-
-  if (scenarioId === "suspicious" || orderOver30) {
-    return {
-      riskLevel: "High",
-      score: orderOver30 ? 82 : 91,
-      productMatch: false,
-      orderValid: !orderOver30,
-      imageAuthentic: false,
-      findings: [
-        ...(orderOver30 ? ["Order is beyond the 30-day return window"] : []),
-        "Uploaded product image does not match the product on the order",
-        "Image metadata indicates the photo may not be of the actual product",
-        ...(isSSD ? ["Product appears to be an SSD but order is for microSD card"] : []),
-      ],
-      recommendation: orderOver30
-        ? "Deny return -- order exceeds 30-day return policy"
-        : "Escalate to fraud operations for manual investigation",
-    }
-  }
-
-  if (scenarioId === "unverifiable") {
-    return {
-      riskLevel: "Medium",
-      score: 48,
-      productMatch: true,
-      orderValid: true,
-      imageAuthentic: false,
-      findings: [
-        "Image quality is too low to conclusively verify product",
-        "Product label partially obscured in uploaded image",
-        ...(mentionsDefect ? ["Reason cites physical defect but damage not visible in image"] : []),
-      ],
-      recommendation: "Request a clearer product image or escalate to support agent",
-    }
-  }
-
-  return {
-    riskLevel: "Low",
-    score: 9,
-    productMatch: true,
-    orderValid: true,
-    imageAuthentic: true,
-    findings: [
-      "Product image matches order record",
-      "Order is within 30-day return window",
-      ...(isXtreme ? ["SanDisk Xtreme product verified via label match"] : ["SanDisk branding confirmed"]),
-      ...(mentionsDefect ? ["Defect reason documented for quality tracking"] : []),
-    ],
-    recommendation: "Approve return -- all checks passed",
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Main Component
-// ---------------------------------------------------------------------------
-
-export function ChatModal({
-  open,
-  step,
-  selectedScenario,
-  onClose,
-  onStepChange,
-  onEscalate,
-  onImageUploaded,
-  lyzrConfig,
-  isLyzrConfigured: isLyzrConfiguredProp,
-  onResetSession,
-  onAddLog,
-  onRawWsEvent,
-  onValidationResult,
-}: ChatModalProps) {
+export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [serialInput, setSerialInput] = useState("")
-  const [freeInput, setFreeInput] = useState("")
-  const [ocrProgress, setOcrProgress] = useState(0)
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [isSending, setIsSending] = useState(false)
-  const [showWelcome, setShowWelcome] = useState(true)
-  const [showWsActivity, setShowWsActivity] = useState(false)
-
-  const isLyzrConfigured = isLyzrConfiguredProp
-
-  function addLog(direction: "request" | "response", sessionId: string, data: Record<string, unknown>) {
-    onAddLog(createLogEntry(direction, sessionId, data, "managerial"))
-  }
-
-  // Return flow state
-  const [returnEmail, setReturnEmail] = useState("")
-  const [returnOrder, setReturnOrder] = useState("")
-  const [returnReason, setReturnReason] = useState("")
-  const [returnOver30, setReturnOver30] = useState(false)
-  const [returnImageUrl, setReturnImageUrl] = useState<string | null>(null)
-  const [returnProgress, setReturnProgress] = useState(0)
-
-  const lyzrConfigRef = useRef(lyzrConfig)
-  lyzrConfigRef.current = lyzrConfig
-
+  const [step, setStep] = useState<ChatStep>("welcome")
+  const [expanded, setExpanded] = useState(false)
+  const [caseId, setCaseId] = useState<string | null>(null)
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; kind: string; imageId?: string }>>([])
+  const [validationResult, setValidationResult] = useState<ValidateResponse | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const returnFileRef = useRef<HTMLInputElement>(null)
-  const chatInputRef = useRef<HTMLInputElement>(null)
-  const ocrResultHandled = useRef(false)
-  const returnResultHandled = useRef(false)
-  const scenario = scenarios[selectedScenario]
-
-  const ws = useLyzrWebSocket(onRawWsEvent)
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages, step])
+  }, [messages])
 
+  // Initialize welcome message
   useEffect(() => {
-    if (step === "welcome") {
-      ocrResultHandled.current = false
-      returnResultHandled.current = false
-      setShowWelcome(true)
-      setMessages([])
-      setReturnEmail("")
-      setReturnOrder("")
-      setReturnReason("")
-      setReturnImageUrl(null)
+    if (open && messages.length === 0) {
+      setMessages([
+        { from: "bot", text: "Hello! Welcome to SanDisk Support. How can I help you today?", timestamp: now() },
+      ])
+      setStep("issue-select")
     }
-  }, [step])
+  }, [open])
 
-  // OCR processing animation
-  useEffect(() => {
-    if (step === "ocr-processing") {
-      setOcrProgress(0)
-      ocrResultHandled.current = false
-      const interval = setInterval(() => {
-        setOcrProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval)
-            setTimeout(() => onStepChange("ocr-result"), 400)
-            return 100
-          }
-          return prev + 5
-        })
-      }, 80)
-      return () => clearInterval(interval)
-    }
-  }, [step, onStepChange])
-
-  useEffect(() => {
-    if (step === "ocr-result" && !ocrResultHandled.current) {
-      ocrResultHandled.current = true
-      ;(async () => {
-        const offlineResult = await runOfflineVerification(scenario)
-        if (offlineResult.validationRow) {
-          onValidationResult?.(offlineResult.validationRow)
-        }
-        const resultText = offlineResult.managerSummary || ""
-        setMessages((prev) => [
-          ...prev,
-          {
-            from: "bot",
-            component: offlineResult.validatorOutput ? (
-              <ValidationDashboard
-                validatorOutput={offlineResult.validatorOutput}
-                productName={scenario.warranty.product}
-                catalogMatch={offlineResult.catalogMatch}
-              />
-            ) : (
-              <OcrResultCard scenario={scenario} />
-            ),
-            timestamp: now(),
-          },
-          { from: "bot", text: resultText, timestamp: now() },
-        ])
-        onStepChange("escalation")
-      })()
-    }
-  }, [step, scenario, onStepChange])
-
-  // Return processing animation
-  useEffect(() => {
-    if (step === "return-processing") {
-      setReturnProgress(0)
-      returnResultHandled.current = false
-      const interval = setInterval(() => {
-        setReturnProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval)
-            setTimeout(() => onStepChange("return-result"), 400)
-            return 100
-          }
-          return prev + 4
-        })
-      }, 60)
-      return () => clearInterval(interval)
-    }
-  }, [step, onStepChange])
-
-  useEffect(() => {
-    if (step === "return-result" && !returnResultHandled.current) {
-      returnResultHandled.current = true
-
-      ;(async () => {
-        const offlineResult = await runOfflineVerification(scenario)
-        if (offlineResult.validationRow) {
-          onValidationResult?.(offlineResult.validationRow)
-        }
-
-        const fraudResult = evaluateReturnFraud(
-          selectedScenario,
-          returnOver30,
-          returnEmail,
-          returnOrder,
-          returnReason,
-          returnImageUrl
-        )
-
-        const summary =
-          fraudResult.riskLevel === "Low"
-            ? "Your return has been approved. You will receive a return shipping label via email shortly."
-            : fraudResult.riskLevel === "High"
-              ? "We were unable to process your return automatically. This case has been flagged for review by our support team."
-              : "We need a bit more information before we can process your return. A support specialist may reach out."
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            from: "bot",
-            component: offlineResult.validatorOutput ? (
-              <ValidationDashboard
-                validatorOutput={offlineResult.validatorOutput}
-                productName={scenario.warranty.product}
-                catalogMatch={offlineResult.catalogMatch}
-              />
-            ) : (
-              <ReturnFraudCard result={fraudResult} />
-            ),
-            timestamp: now(),
-          },
-          { from: "bot", text: summary, timestamp: now() },
-        ])
-        onStepChange("escalation")
-      })()
-    }
-  }, [step, selectedScenario, returnOver30, returnEmail, returnOrder, returnReason, returnImageUrl, onStepChange, scenario])
-
-  // Helpers
   function addMsg(from: "bot" | "user", text: string) {
     setMessages((prev) => [...prev, { from, text, timestamp: now() }])
   }
@@ -800,660 +287,223 @@ export function ChatModal({
     setMessages((prev) => [...prev, { from, component, timestamp: now() }])
   }
 
-  function resetAndSync() {
-    const { sessionId, userId } = onResetSession()
-    lyzrConfigRef.current = { ...lyzrConfigRef.current, sessionId, userId }
-    return sessionId
-  }
+  // ---------------------------------------------------------------------------
+  // Step handlers
+  // ---------------------------------------------------------------------------
 
-  function handleNewSession() {
-    resetAndSync()
-    ws.disconnect()
-    ws.clearEvents()
-    setMessages([])
-    setShowWelcome(true)
-    setFreeInput("")
-    setIsSending(false)
-    onStepChange("welcome")
-  }
-
-  // Welcome -> conversation
-  function startConversation() {
-    resetAndSync()
-    setMessages([])
-    setShowWelcome(false)
-    if (isLyzrConfigured) {
-      handleLyzrMessage("hello")
-    } else {
-      addMsg("bot", "Hello! Welcome to SanDisk Support. I can help with warranty, replacement status, product returns, and troubleshooting.")
+  async function handleIssueSelect(issueType: "warranty" | "authentication" | "replacement_status" | "troubleshooting") {
+    const labels: Record<string, string> = {
+      warranty: "Warranty Verification",
+      authentication: "Product Authentication",
+      replacement_status: "Replacement Status",
+      troubleshooting: "Troubleshooting",
     }
-  }
-
-  function handleWelcomeSelect(issue: string) {
-    resetAndSync()
-    setShowWelcome(false)
-
-    if (isLyzrConfigured) {
-      setMessages([])
-      handleLyzrMessage(issue === "Return a Product" ? "need to return a product" : issue)
-      return
-    }
-
-    if (issue === "Return a Product") {
-      setMessages([
-        { from: "user", text: "need to return a product", timestamp: now() },
-      ])
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          { from: "bot", text: "Let us get started with your return request.", timestamp: now() },
-          { from: "bot", text: "Is your order more than 30 days?", timestamp: now() },
-        ])
-        onStepChange("return-30day")
-      }, 300)
-      return
-    }
-
-    setMessages([
-      { from: "bot", text: "Hello! Welcome to SanDisk Support. I can help with warranty, replacement status, product registration, and troubleshooting.", timestamp: now() },
-      { from: "user", text: issue, timestamp: now() },
-      {
-        from: "bot",
-        text: issue === "Warranty & Replacement"
-          ? "Sure, I can help with warranty and replacements. What do you need?"
-          : `I'd be happy to help with ${issue}. For this demo, let's proceed with the warranty flow.`,
-        timestamp: now(),
-      },
-    ])
-    onStepChange("warranty-subtype")
-  }
-
-  function extractAndPersistValidation(responseText: string): string {
-    const cfg = lyzrConfigRef.current
-    const extracted = parseValidationFromResponse(responseText)
-    if (!extracted) return responseText
-
-    const { checks, overallStatus, inputSummary } = normalizeChecks(extracted.validationJson)
-    const row: ValidationResultRow = {
-      id: Date.now() + Math.random(),
-      sessionId: cfg.sessionId,
-      agentId: cfg.agentId,
-      userId: cfg.userId,
-      inputSummary,
-      rawResult: extracted.validationJson,
-      checks,
-      overallStatus,
-      createdAt: new Date().toISOString(),
-    }
-    persistValidationResult(row)
-    onValidationResult?.(row)
-
-    return extracted.chatText || responseText
-  }
-
-  // Lyzr
-  async function handleLyzrMessage(userMessage: string) {
-    const cfg = lyzrConfigRef.current
-    addMsg("user", userMessage)
-    setIsSending(true)
-    ws.connect(cfg.sessionId, cfg.apiKey)
-    addLog("request", cfg.sessionId, {
-      agentId: cfg.agentId,
-      userId: cfg.userId,
-      sessionId: cfg.sessionId,
-      message: userMessage,
-    })
-    try {
-      const result = await sendToLyzr(cfg, userMessage)
-      ws.disconnect()
-      addLog("response", cfg.sessionId, result as Record<string, unknown>)
-      const rawResponseText = result.response || result.error || "No response received."
-      const responseText = extractAndPersistValidation(rawResponseText)
-      const parsed = tryParseLyzrResponse(responseText)
-      if (parsed) {
-        addComponent("bot", <LyzrResponseCard data={parsed} />)
-      } else if (responseText) {
-        const jsonObj = tryExtractJson(responseText)
-        if (jsonObj) {
-          addComponent("bot", <JsonResponseCard data={jsonObj} />)
-        } else {
-          addMsg("bot", responseText)
-        }
-      }
-    } catch (err) {
-      ws.disconnect()
-      addLog("response", cfg.sessionId, { error: err instanceof Error ? err.message : "Network error" })
-      addMsg("bot", "Failed to reach the Movate agent. Please check your settings.")
-    } finally {
-      setIsSending(false)
-    }
-  }
-
-  function handleBottomInputSubmit() {
-    const msg = chatInputRef.current?.value?.trim() || freeInput.trim()
-    if (!msg) return
-    setFreeInput("")
-    if (showWelcome) {
-      resetAndSync()
-      setMessages([])
-      setShowWelcome(false)
-      if (isLyzrConfigured) {
-        handleLyzrMessage(msg)
-      } else {
-        addMsg("bot", "Hello! Welcome to SanDisk Support.")
-        addMsg("user", msg)
-      }
-      return
-    }
-    if (isLyzrConfigured) {
-      handleLyzrMessage(msg)
-      return
-    }
-    addMsg("user", msg)
-    addMsg("bot", "Thank you for your message. Please select one of the support options above.")
-  }
-
-  // Warranty flow handlers
-  function handleIssueSelect(issue: string) {
-    if (issue === "Return a Product") {
-      handleWelcomeSelect(issue)
-      return
-    }
-    if (isLyzrConfigured) { handleLyzrMessage(issue); return }
-    addMsg("user", issue)
-    addMsg("bot", issue === "Warranty & Replacement"
-      ? "Sure, I can help with warranty and replacements. What do you need?"
-      : `I'd be happy to help with ${issue}. For this demo, let's proceed with the warranty flow.`)
-    onStepChange("warranty-subtype")
-  }
-
-  function handleWarrantySubtype(sub: string) {
-    if (sub === "Return / Replacement Request") {
-      addMsg("user", sub)
-      addMsg("bot", "Let us get started with your return request.")
-      addMsg("bot", "Is your order more than 30 days?")
-      onStepChange("return-30day")
-      return
-    }
-    if (isLyzrConfigured) { handleLyzrMessage(sub); return }
-    addMsg("user", sub)
-    addMsg("bot", "To look up your warranty, please enter your product serial number.")
-    onStepChange("serial-entry")
-  }
-
-  function handleSerialSubmit() {
-    const serial = serialInput || scenario.serialEntered
-    if (isLyzrConfigured) { setSerialInput(""); handleLyzrMessage(`Serial: ${serial}`); return }
-    addMsg("user", `Serial: ${serial}`)
-    addMsg("bot", "Thank you. I found a matching warranty record:")
-    addComponent("bot", <WarrantyCard scenario={scenario} />)
-    addMsg("bot", "To continue your warranty verification, please upload a clear image of the product label.")
-    setSerialInput("")
-    onStepChange("image-request")
-  }
-
-  function handleDemoImageUpload() {
-    onImageUploaded?.(scenario.productImage)
-    addComponent("user", <ImagePreview src={scenario.productImage} alt="Product upload" />)
-    addMsg("bot", "Thank you. Analyzing your product image now...")
-    onStepChange("ocr-processing")
-  }
-
-  async function handleRealFileUpload(file: File) {
-    const cfg = lyzrConfigRef.current
-    const objectUrl = URL.createObjectURL(file)
-    onImageUploaded?.(objectUrl)
-    addComponent("user", <ImagePreview src={objectUrl} alt="Uploaded product" />)
-    setIsSending(true)
-    ws.connect(cfg.sessionId, cfg.apiKey)
+    addMsg("user", labels[issueType])
 
     try {
-      const compressed = await compressImage(file)
+      const { case_id } = await createCase(issueType)
+      setCaseId(case_id)
+      addMsg("bot", "I've opened a case for you. Please upload photos of your product. You can include:\n\n- **Product photo** (front/back)\n- **Label photo** (serial number, model)\n- **Packaging** (if available)\n- **Proof of purchase** (receipt/invoice, PDF accepted)\n\nUpload at least one product or label photo, then click **Run Verification**.")
+      setStep("image-upload")
+    } catch {
+      addMsg("bot", "I'm sorry, there was an error creating your case. Please try again.")
+    }
+  }
 
-      // App-driven orchestration: OCR -> Validator -> Dashboard -> Manager summary
-      const progressKey = Date.now()
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files || !caseId) return
 
-      const updateProgress = (p: WorkflowProgress) => {
-        setMessages((prev) => {
-          const idx = prev.findIndex((m) => m.timestamp === `progress-${progressKey}`)
-          if (idx === -1) {
-            return [...prev, { from: "bot" as const, component: <WorkflowProgressBar progress={p} />, timestamp: `progress-${progressKey}` }]
-          }
-          const copy = [...prev]
-          copy[idx] = { from: "bot" as const, component: <WorkflowProgressBar progress={p} />, timestamp: `progress-${progressKey}` }
-          return copy
-        })
+    const newFiles: Array<{ file: File; kind: string; imageId?: string }> = []
+
+    for (const file of Array.from(files)) {
+      const kind = inferImageKind(file.name)
+      addMsg("user", `[Uploaded: ${file.name}]`)
+
+      try {
+        const result = await uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file)
+        newFiles.push({ file, kind, imageId: result.image_id })
+        addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
+      } catch {
+        addMsg("bot", `Failed to upload ${file.name}. Please try again.`)
       }
+    }
 
-      updateProgress({ phase: "order-lookup", detail: "Looking up order..." })
+    setUploadedFiles((prev) => [...prev, ...newFiles])
+    setStep("upload-preview")
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
 
-      const result = await runVerificationWorkflow({
-        config: cfg,
-        imageBase64: compressed,
-        scenario,
-        addLog: onAddLog,
-        onProgress: updateProgress,
-        onValidation: (row) => onValidationResult?.(row),
+  function inferImageKind(filename: string): string {
+    const lower = filename.toLowerCase()
+    if (lower.includes("invoice") || lower.includes("receipt") || lower.includes("pop") || lower.endsWith(".pdf")) return "pop"
+    if (lower.includes("label") || lower.includes("serial")) return "label"
+    if (lower.includes("box") || lower.includes("pack")) return "packaging"
+    return "product"
+  }
+
+  async function handleRunValidation() {
+    if (!caseId) return
+
+    setStep("validating")
+    const spinnerIdx = messages.length
+    addComponent("bot", <ValidatingSpinner />)
+
+    try {
+      const result = await validateCase(caseId)
+      setValidationResult(result)
+      setMessages((prev) => {
+        const without = prev.filter((_, i) => i !== spinnerIdx)
+        return [...without, { from: "bot" as const, component: <ValidationResultCard summary={result.customer_summary} />, timestamp: now() }]
       })
-
-      ws.disconnect()
-
-      // Remove progress bar, replace with final dashboard
-      setMessages((prev) => prev.filter((m) => m.timestamp !== `progress-${progressKey}`))
-
-      if (result.validatorOutput) {
-        addComponent("bot", (
-          <ValidationDashboard
-            validatorOutput={result.validatorOutput}
-            productName={scenario.warranty.product}
-            catalogMatch={result.catalogMatch}
-          />
-        ))
-      }
-
-      if (result.managerSummary) {
-        addMsg("bot", result.managerSummary)
-      } else if (result.error) {
-        addMsg("bot", `Verification encountered an issue: ${result.error}. A support specialist can assist you.`)
-      }
-    } catch (err) {
-      ws.disconnect()
-      addMsg("bot", "Failed to analyze the image. Please check your agent settings.")
-    } finally {
-      setIsSending(false)
+      setStep("result")
+    } catch {
+      setMessages((prev) => prev.filter((_, i) => i !== spinnerIdx))
+      addMsg("bot", "I'm sorry, the verification timed out or encountered an error. Please try again or contact us directly.")
+      setStep("upload-preview")
     }
   }
 
-  function handleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) handleRealFileUpload(file)
-    e.target.value = ""
-  }
-
-  // --- Return flow handlers ---
-
-  function handle30DayAnswer(over30: boolean) {
-    setReturnOver30(over30)
-    addMsg("user", over30 ? "Yes" : "No")
-    if (over30) {
-      addMsg("bot", "We're sorry, but our return policy only covers orders within 30 days. We'll still review your case. Please provide your email address.")
-    } else {
-      addMsg("bot", "Kindly enter your email address.")
+  async function handleEscalate() {
+    if (!caseId) return
+    try {
+      await escalateCase(caseId)
+      addMsg("bot", "Your case has been escalated to a specialist for review. They will follow up with you shortly.")
+      setStep("escalated")
+      onEscalate()
+    } catch {
+      addMsg("bot", "We couldn't escalate right now. Please try again.")
     }
-    onStepChange("return-email")
   }
 
-  function handleReturnEmailSubmit() {
-    const email = returnEmail.trim() || "customer@email.com"
-    setReturnEmail(email)
-    addMsg("user", email)
-    addMsg("bot", "Thank you. Please enter your order number.")
-    onStepChange("return-order")
+  function handleReset() {
+    setMessages([])
+    setStep("welcome")
+    setCaseId(null)
+    setUploadedFiles([])
+    setValidationResult(null)
+    setTimeout(() => {
+      setMessages([{ from: "bot", text: "Hello! Welcome to SanDisk Support. How can I help you today?", timestamp: now() }])
+      setStep("issue-select")
+    }, 100)
   }
 
-  function handleReturnOrderSubmit() {
-    const order = returnOrder.trim() || "ORD-2026-7741"
-    setReturnOrder(order)
-    addMsg("user", order)
-    addMsg("bot", "Got it. Now please upload a photo of the product you'd like to return.")
-    onStepChange("return-image")
-  }
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
-  function handleReturnImageSelect() {
-    const imgUrl = scenario.productImage
-    setReturnImageUrl(imgUrl)
-    onImageUploaded?.(imgUrl)
-    addComponent("user", <ImagePreview src={imgUrl} alt="Return product" />)
-    addMsg("bot", "Thank you for the image. Lastly, please describe your reason for returning this product.")
-    onStepChange("return-reason")
-  }
+  if (!open) return null
 
-  function handleReturnFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const url = URL.createObjectURL(file)
-    setReturnImageUrl(url)
-    onImageUploaded?.(url)
-    addComponent("user", <ImagePreview src={url} alt="Return product" />)
-    addMsg("bot", "Thank you for the image. Lastly, please describe your reason for returning this product.")
-    onStepChange("return-reason")
-    e.target.value = ""
-  }
-
-  function handleReturnReasonSubmit() {
-    const reason = returnReason.trim() || "Product not as described"
-    setReturnReason(reason)
-    addMsg("user", reason)
-    addMsg("bot", "Thank you. We're now processing your return request and verifying the details...")
-    onStepChange("return-processing")
-  }
-
-  // ---
-
-  const sizeClasses = isExpanded
-    ? "fixed inset-4 z-50 w-auto h-auto"
-    : "fixed bottom-6 right-6 z-50 w-[720px] h-[700px]"
-
-  const showConversation = !showWelcome && messages.length > 0
-
-  // Determine which input field value / handler to use in the bottom bar
-  const isReturnTextStep = step === "return-email" || step === "return-order" || step === "return-reason"
-  const bottomValue = isReturnTextStep
-    ? (step === "return-email" ? returnEmail : step === "return-order" ? returnOrder : returnReason)
-    : (step === "serial-entry" ? serialInput : freeInput)
-
-  function handleBottomChange(val: string) {
-    if (step === "return-email") setReturnEmail(val)
-    else if (step === "return-order") setReturnOrder(val)
-    else if (step === "return-reason") setReturnReason(val)
-    else if (step === "serial-entry") setSerialInput(val)
-    else setFreeInput(val)
-  }
-
-  function handleBottomSubmit() {
-    const rawVal = chatInputRef.current?.value ?? ""
-    if (step === "return-email") { setReturnEmail(rawVal); handleReturnEmailSubmit(); return }
-    if (step === "return-order") { setReturnOrder(rawVal); handleReturnOrderSubmit(); return }
-    if (step === "return-reason") { setReturnReason(rawVal); handleReturnReasonSubmit(); return }
-    if (step === "serial-entry") { setSerialInput(rawVal); handleSerialSubmit(); return }
-    handleBottomInputSubmit()
-  }
-
-  const bottomPlaceholder =
-    step === "return-email" ? "Enter your email address"
-    : step === "return-order" ? "Enter your order number"
-    : step === "return-reason" ? "Describe your reason for return"
-    : "Type here to begin"
+  const modalClass = expanded
+    ? "fixed inset-4 z-50 flex flex-col rounded-2xl shadow-2xl border border-border bg-background"
+    : "fixed bottom-6 right-6 z-50 flex flex-col w-[400px] h-[600px] rounded-2xl shadow-2xl border border-border bg-background"
 
   return (
-    <div
-      className={`${sizeClasses} bg-background border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-200 ${!open ? "hidden" : ""}`}
-    >
+    <div className={modalClass}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-border bg-background shrink-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <img src="/sandisk-logo.svg" alt="SanDisk" className="h-3.5 shrink-0" />
-          <span className="text-xs font-bold tracking-wide text-foreground shrink-0">CHAT</span>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+        <div className="flex items-center gap-2">
+          <img src="/sandisk-logo.svg" alt="SanDisk" className="h-5" />
+          <span className="text-sm font-semibold">Support Chat</span>
         </div>
-        <div className="flex items-center gap-0.5 shrink-0">
-          {isLyzrConfigured && !showWelcome && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title={showWsActivity ? "Hide agent activity" : "Show agent activity"}
-              onClick={() => setShowWsActivity((v) => !v)}
-            >
-              <Activity className={`h-3.5 w-3.5 ${showWsActivity ? "text-green-600" : "text-muted-foreground"}`} />
-            </Button>
-          )}
-          {isLyzrConfigured && !showWelcome && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title="Regenerate session ID"
-              onClick={resetAndSync}
-            >
-              <Shuffle className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {isLyzrConfigured && !showWelcome && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              title="New session"
-              onClick={handleNewSession}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {isExpanded && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsExpanded(false)}>
-              <Minimize2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setExpanded(!expanded)}>
+            {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
             <Minus className="h-3.5 w-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
 
-      {/* Session ID bar */}
-      {isLyzrConfigured && !showWelcome && (
-        <div className="flex items-center gap-1.5 px-3 py-1 border-b border-border bg-muted/30 shrink-0">
-          <span className="text-[10px] text-muted-foreground">Session:</span>
-          <code className="text-[10px] font-mono text-muted-foreground select-all truncate">{lyzrConfig.sessionId}</code>
-        </div>
-      )}
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {messages.map((msg, i) => (
+          <MessageBubble key={i} msg={msg} expanded={expanded} />
+        ))}
+      </div>
 
-      {/* Welcome Screen */}
-      {showWelcome && step === "welcome" && (
-        <WelcomeScreen />
-      )}
+      {/* Bottom action area */}
+      <div className="px-4 py-3 border-t border-border shrink-0 space-y-2">
+        {step === "issue-select" && (
+          <div className="flex flex-wrap gap-2">
+            <QuickChip label="Warranty Verification" onClick={() => handleIssueSelect("warranty")} />
+            <QuickChip label="Product Authentication" onClick={() => handleIssueSelect("authentication")} />
+            <QuickChip label="Replacement Status" onClick={() => handleIssueSelect("replacement_status")} />
+            <QuickChip label="Troubleshooting" onClick={() => handleIssueSelect("troubleshooting")} />
+          </div>
+        )}
 
-      {/* Conversation Messages */}
-      {showConversation && (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
-          {messages.map((msg, i) => (
-            <MessageBubble key={i} msg={msg} expanded={isExpanded} />
-          ))}
-
-          {isSending && (
-            <div className="flex items-start gap-2">
-              <BotAvatar />
-              <div className="bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm">
-                {showWsActivity ? (
-                  <AgentActivityFeed events={ws.events} isConnected={ws.isConnected} />
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Thinking...</span>
-                  </div>
-                )}
+        {(step === "image-upload" || step === "upload-preview") && (
+          <div className="space-y-2">
+            {uploadedFiles.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {uploadedFiles.map((f, i) => (
+                  <Badge key={i} variant="outline" className="text-[10px] flex items-center gap-1">
+                    {f.file.type === "application/pdf" ? (
+                      <FileText className="h-3 w-3" />
+                    ) : (
+                      <div className="h-3 w-3 rounded-sm bg-secondary overflow-hidden">
+                        <img src={URL.createObjectURL(f.file)} alt="" className="h-full w-full object-cover" />
+                      </div>
+                    )}
+                    {f.file.name.length > 20 ? f.file.name.slice(0, 18) + "..." : f.file.name}
+                    <span className="text-muted-foreground capitalize">({f.kind})</span>
+                  </Badge>
+                ))}
               </div>
-            </div>
-          )}
-
-          {/* --- Warranty flow chips --- */}
-          {!isLyzrConfigured && step === "warranty-subtype" && (
-            <div className="flex flex-wrap gap-2 pt-1 pl-10">
-              <QuickChip label="Warranty Status" onClick={() => handleWarrantySubtype("Warranty Status")} />
-              <QuickChip label="Replacement Status" onClick={() => handleWarrantySubtype("Replacement Status")} />
-              <QuickChip label="Return / Replacement Request" onClick={() => handleWarrantySubtype("Return / Replacement Request")} />
-            </div>
-          )}
-
-          {!isLyzrConfigured && step === "serial-entry" && (
-            <div className="flex gap-2 pt-1 pl-10">
-              <Input
-                placeholder={scenario.serialEntered}
-                value={serialInput}
-                onChange={(e) => setSerialInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSerialSubmit()}
-                className="text-sm"
-              />
-              <Button size="sm" onClick={handleSerialSubmit}>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-
-          {!isLyzrConfigured && step === "image-request" && (
-            <div className="pt-1 pl-10 space-y-2">
-              <div className="rounded-lg overflow-hidden border border-border">
-                <img src={scenario.productImage} alt="Product to upload" className="w-full h-auto max-h-36 object-cover" />
-              </div>
-              <button
-                onClick={handleDemoImageUpload}
-                className="w-full border-2 border-dashed border-border rounded-lg p-4 flex flex-col items-center gap-1.5 hover:border-sandisk-red hover:bg-secondary/50 transition-colors cursor-pointer"
-              >
-                <Upload className="h-6 w-6 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Click to upload this product image</span>
-              </button>
-            </div>
-          )}
-
-          {!isLyzrConfigured && step === "ocr-processing" && (
-            <div className="pt-1 pl-10 space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                AI verification in progress...
-              </div>
-              <Progress value={ocrProgress} className="h-2" />
-              <div className="text-xs text-muted-foreground text-right">{ocrProgress}%</div>
-            </div>
-          )}
-
-          {/* --- Return flow steps --- */}
-          {step === "return-30day" && (
-            <div className="flex gap-3 pt-1 pl-10">
-              <RedChip label="Yes" onClick={() => handle30DayAnswer(true)} />
-              <RedChip label="No" onClick={() => handle30DayAnswer(false)} />
-            </div>
-          )}
-
-          {step === "return-image" && (
-            <div className="pt-1 pl-10 space-y-2">
-              <input
-                ref={returnFileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleReturnFileUpload}
-              />
-              <div className="rounded-lg overflow-hidden border border-border">
-                <img src={scenario.productImage} alt="Product to return" className="w-full h-auto max-h-36 object-cover" />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleReturnImageSelect}
-                  className="flex-1 border-2 border-dashed border-border rounded-lg p-3 flex flex-col items-center gap-1 hover:border-sandisk-red hover:bg-secondary/50 transition-colors cursor-pointer"
-                >
-                  <Upload className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Use demo image</span>
-                </button>
-                <button
-                  onClick={() => returnFileRef.current?.click()}
-                  className="flex-1 border-2 border-dashed border-border rounded-lg p-3 flex flex-col items-center gap-1 hover:border-sandisk-red hover:bg-secondary/50 transition-colors cursor-pointer"
-                >
-                  <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Upload your own</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === "return-reason" && (
-            <div className="pt-1 pl-10 space-y-2">
-              <Textarea
-                placeholder="e.g., Product not as described, defective, wrong item..."
-                value={returnReason}
-                onChange={(e) => setReturnReason(e.target.value)}
-                className="text-sm min-h-[80px] resize-none"
-              />
+            )}
+            <div className="flex gap-2">
               <Button
+                variant="outline"
                 size="sm"
-                className="bg-sandisk-red hover:bg-sandisk-red/90 text-white w-full"
-                onClick={handleReturnReasonSubmit}
-                disabled={!returnReason.trim()}
+                className="flex-1"
+                onClick={() => fileInputRef.current?.click()}
               >
-                Submit Return Request
+                <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+                Add Photo / PDF
               </Button>
-            </div>
-          )}
-
-          {step === "return-processing" && (
-            <div className="pt-1 pl-10 space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Processing return and running fraud checks...
-              </div>
-              <div className="space-y-1.5 text-xs text-muted-foreground">
-                {returnProgress > 15 && <div className="flex items-center gap-2"><CircleCheck className="h-3.5 w-3.5 text-green-600" /> Validating order number...</div>}
-                {returnProgress > 35 && <div className="flex items-center gap-2"><CircleCheck className="h-3.5 w-3.5 text-green-600" /> Verifying email against account...</div>}
-                {returnProgress > 55 && <div className="flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyzing product image with AI...</div>}
-                {returnProgress > 75 && <div className="flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cross-referencing order history...</div>}
-                {returnProgress > 90 && <div className="flex items-center gap-2"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating fraud risk assessment...</div>}
-              </div>
-              <Progress value={returnProgress} className="h-2" />
-            </div>
-          )}
-
-          {/* --- Escalation (shared) --- */}
-          {!isLyzrConfigured && step === "escalation" && (
-            <div className="flex flex-wrap gap-2 pt-1 pl-10">
-              {scenario.risk.level === "Low" && !returnResultHandled.current ? (
-                <>
-                  <QuickChip label="Continue Claim" onClick={() => {
-                    addMsg("user", "Continue Claim")
-                    addMsg("bot", "Your replacement has been approved. You will receive a confirmation email shortly. Thank you for choosing SanDisk!")
-                    onStepChange("escalation")
-                  }} />
-                  <QuickChip label="Chat with Agent" onClick={onEscalate} />
-                </>
-              ) : (
-                <>
-                  <Button size="sm" className="bg-sandisk-red hover:bg-sandisk-red/90 text-white" onClick={onEscalate}>
-                    Escalate to Live Agent
-                  </Button>
-                  <QuickChip label="Start Over" onClick={() => {
-                    onStepChange("welcome")
-                  }} />
-                </>
+              {uploadedFiles.length > 0 && (
+                <RedChip label="Run Verification" onClick={handleRunValidation} />
               )}
             </div>
-          )}
-        </div>
-      )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,application/pdf"
+              multiple
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+          </div>
+        )}
 
-      {/* Bottom bar */}
-      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInputChange} />
-      <div className="mt-auto border-t border-border px-4 py-3 flex items-center gap-3 shrink-0">
-        <button
-          type="button"
-          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          onClick={() => {
-            if (isLyzrConfigured) fileInputRef.current?.click()
-          }}
-        >
-          {isLyzrConfigured ? <ImageIcon className="h-5 w-5" /> : <Paperclip className="h-5 w-5" />}
-        </button>
-        <input
-          ref={chatInputRef}
-          type="text"
-          placeholder={bottomPlaceholder}
-          className="flex-1 text-sm h-9 border-0 shadow-none outline-none bg-transparent placeholder:text-muted-foreground"
-          value={bottomValue}
-          onChange={(e) => handleBottomChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !isSending) {
-              e.preventDefault()
-              e.stopPropagation()
-              handleBottomSubmit()
-            }
-          }}
-          disabled={isSending}
-        />
-        <button
-          type="button"
-          className="shrink-0 text-foreground hover:text-sandisk-red transition-colors cursor-pointer disabled:opacity-40"
-          disabled={isSending}
-          onMouseDown={(e) => {
-            e.preventDefault()
-            if (!isSending) handleBottomSubmit()
-          }}
-          onClick={(e) => {
-            e.preventDefault()
-            if (!isSending) handleBottomSubmit()
-          }}
-        >
-          <ArrowRight className="h-5 w-5" />
-        </button>
+        {step === "validating" && (
+          <div className="text-center text-xs text-muted-foreground py-2">
+            <Loader2 className="h-4 w-4 animate-spin inline mr-1.5" />
+            AI verification running...
+          </div>
+        )}
+
+        {step === "result" && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={handleEscalate}>
+              Speak to Agent
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleReset}>
+              New Case
+            </Button>
+          </div>
+        )}
+
+        {step === "escalated" && (
+          <div className="text-center text-xs text-muted-foreground py-2">
+            Case escalated to specialist. You can close this chat.
+          </div>
+        )}
       </div>
     </div>
   )
