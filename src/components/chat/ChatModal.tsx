@@ -90,10 +90,15 @@ function RedChip({ label, onClick }: { label: string; onClick: () => void }) {
 
 function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean }) {
   if (msg.from === "user") {
+    const isComponent = !!msg.component
     return (
       <div className="flex flex-col items-end gap-1">
         <div
-          className={`${expanded ? "max-w-[60%]" : "max-w-[85%]"} bg-sandisk-red text-white rounded-full px-5 py-2.5 text-sm`}
+          className={`${expanded ? "max-w-[60%]" : "max-w-[85%]"} ${
+            isComponent
+              ? "text-sm"
+              : "bg-sandisk-red text-white rounded-full px-5 py-2.5 text-sm"
+          }`}
         >
           {msg.text || msg.component}
         </div>
