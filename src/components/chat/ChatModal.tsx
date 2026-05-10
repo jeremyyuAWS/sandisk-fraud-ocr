@@ -258,7 +258,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [step, setStep] = useState<ChatStep>("welcome")
   const [expanded, setExpanded] = useState(false)
   const [caseId, setCaseId] = useState<string | null>(null)
-  const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; kind: string; imageId?: string }>>([])
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>>([])
   const [validationResult, setValidationResult] = useState<ValidateResponse | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -314,15 +314,28 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     const files = e.target.files
     if (!files || !caseId) return
 
-    const newFiles: Array<{ file: File; kind: string; imageId?: string }> = []
+    const newFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }> = []
 
     for (const file of Array.from(files)) {
       const kind = inferImageKind(file.name)
-      addMsg("user", `[Uploaded: ${file.name}]`)
+      const isImage = file.type.startsWith("image/")
+      const previewUrl = isImage ? URL.createObjectURL(file) : undefined
+
+      // Show image preview in chat
+      if (isImage && previewUrl) {
+        addComponent("user", (
+          <div className="space-y-1">
+            <img src={previewUrl} alt={file.name} className="max-w-[200px] max-h-[160px] rounded-lg object-cover" />
+            <div className="text-xs opacity-80">{file.name}</div>
+          </div>
+        ))
+      } else {
+        addMsg("user", `[Uploaded: ${file.name}]`)
+      }
 
       try {
         const result = await uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file)
-        newFiles.push({ file, kind, imageId: result.image_id })
+        newFiles.push({ file, kind, imageId: result.image_id, previewUrl })
         addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
       } catch {
         addMsg("bot", `Failed to upload ${file.name}. Please try again.`)
@@ -445,10 +458,12 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
                   <Badge key={i} variant="outline" className="text-[10px] flex items-center gap-1">
                     {f.file.type === "application/pdf" ? (
                       <FileText className="h-3 w-3" />
-                    ) : (
+                    ) : f.previewUrl ? (
                       <div className="h-3 w-3 rounded-sm bg-secondary overflow-hidden">
-                        <img src={URL.createObjectURL(f.file)} alt="" className="h-full w-full object-cover" />
+                        <img src={f.previewUrl} alt="" className="h-full w-full object-cover" />
                       </div>
+                    ) : (
+                      <div className="h-3 w-3 rounded-sm bg-secondary" />
                     )}
                     {f.file.name.length > 20 ? f.file.name.slice(0, 18) + "..." : f.file.name}
                     <span className="text-muted-foreground capitalize">({f.kind})</span>
