@@ -90,6 +90,7 @@ function RedChip({ label, onClick }: { label: string; onClick: () => void }) {
 // ---------------------------------------------------------------------------
 
 function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean }) {
+  const textSize = expanded ? "text-base" : "text-sm"
   if (msg.from === "user") {
     const isComponent = !!msg.component
     return (
@@ -97,14 +98,14 @@ function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean 
         <div
           className={`${expanded ? "max-w-[60%]" : "max-w-[85%]"} ${
             isComponent
-              ? "text-sm"
-              : "bg-sandisk-red text-white rounded-full px-5 py-2.5 text-sm"
+              ? textSize
+              : `bg-sandisk-red text-white rounded-full px-5 py-2.5 ${textSize}`
           }`}
         >
           {msg.text || msg.component}
         </div>
         {msg.timestamp && (
-          <span className="text-[11px] text-muted-foreground mr-1">{msg.timestamp}</span>
+          <span className={`${expanded ? "text-xs" : "text-[11px]"} text-muted-foreground mr-1`}>{msg.timestamp}</span>
         )}
       </div>
     )
@@ -118,14 +119,14 @@ function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean 
         <div
           className={`${expanded ? "max-w-[60%]" : "max-w-[85%]"} ${
             isComponent
-              ? expanded ? "max-w-md w-full" : "w-full"
-              : "bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm"
+              ? expanded ? "max-w-lg w-full" : "w-full"
+              : `bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 ${textSize}`
           }`}
         >
           {msg.component ? msg.component : msg.text ? <MarkdownMessage content={msg.text} /> : null}
         </div>
         {msg.timestamp && (
-          <span className="text-[11px] text-muted-foreground ml-1">{msg.timestamp}</span>
+          <span className={`${expanded ? "text-xs" : "text-[11px]"} text-muted-foreground ml-1`}>{msg.timestamp}</span>
         )}
       </div>
     </div>
@@ -154,11 +155,11 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
 
   return (
     <Card className="border border-border">
-      <CardContent className="p-3 space-y-3">
+      <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon className={`h-5 w-5 ${iconColor}`} />
-            <span className="text-sm font-semibold text-foreground">{summary.headline}</span>
+            <span className="text-base font-semibold text-foreground">{summary.headline}</span>
           </div>
           <Badge variant="outline" className={`text-xs font-bold ${bandColor}`}>
             {summary.risk_band} Risk
@@ -167,14 +168,14 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
 
         <Separator />
 
-        <p className="text-xs text-muted-foreground">{summary.body}</p>
+        <p className="text-sm text-muted-foreground">{summary.body}</p>
 
         <Separator />
 
-        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
           Verification Checks
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-2">
           {summary.checks.map((check: ValidationCheck, i: number) => {
             const color =
               check.result === "Passed" ? "text-green-600"
@@ -186,11 +187,11 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
               : Clock
             return (
               <div key={i} className="flex items-start gap-2">
-                <CheckIcon className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${color}`} />
+                <CheckIcon className={`h-4 w-4 shrink-0 mt-0.5 ${color}`} />
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-medium text-foreground">{check.name}</span>
+                  <span className="text-sm font-medium text-foreground">{check.name}</span>
                   {check.detail && (
-                    <span className="text-xs text-muted-foreground ml-1.5">{check.detail}</span>
+                    <p className="text-xs text-muted-foreground mt-0.5">{check.detail}</p>
                   )}
                 </div>
               </div>
@@ -201,7 +202,7 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
         {summary.warranty && (
           <>
             <Separator />
-            <div className="text-xs">
+            <div className="text-sm">
               <span className="text-muted-foreground">Warranty: </span>
               <span className="font-medium text-foreground">{summary.warranty}</span>
             </div>
@@ -211,16 +212,16 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
         {summary.extracted && summary.extracted.length > 0 && (
           <>
             <Separator />
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
               What we read from your uploads
             </div>
             <div className="space-y-2">
               {summary.extracted.map((item, i) => (
                 <div key={i} className="space-y-1">
-                  <div className="text-[10px] text-muted-foreground capitalize">
+                  <div className="text-xs text-muted-foreground capitalize">
                     {item.kind} — {item.filename}
                   </div>
-                  <div className="grid grid-cols-[80px_1fr] gap-y-0.5 text-[11px]">
+                  <div className="grid grid-cols-[100px_1fr] gap-y-0.5 text-sm">
                     {item.fields.map((f, j) => (
                       <div key={j} className="contents">
                         <span className="text-muted-foreground">{f.label}</span>
@@ -237,10 +238,10 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
         {summary.next_steps && summary.next_steps.length > 0 && (
           <>
             <Separator />
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
               Next Steps
             </div>
-            <ul className="space-y-1 text-xs text-muted-foreground">
+            <ul className="space-y-1.5 text-sm text-muted-foreground">
               {summary.next_steps.map((step, i) => (
                 <li key={i} className="flex items-start gap-1.5">
                   <span className="text-foreground font-medium">{i + 1}.</span>
@@ -267,16 +268,16 @@ function ClassificationCard({ classification }: { classification: Classification
 
   return (
     <Card className="border border-border">
-      <CardContent className="p-3 space-y-2">
+      <CardContent className="p-4 space-y-2.5">
         <div className="flex items-start gap-2">
-          <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-          <p className="text-xs text-foreground leading-relaxed">{classification.chat_message}</p>
+          <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+          <p className="text-sm text-foreground leading-relaxed">{classification.chat_message}</p>
         </div>
 
         {classification.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
             {classification.tags.map((tag, i) => (
-              <Badge key={i} variant="outline" className="text-[9px] py-0 px-1.5 font-normal">
+              <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 font-normal">
                 {tag}
               </Badge>
             ))}
@@ -286,9 +287,9 @@ function ClassificationCard({ classification }: { classification: Classification
         {(classification.fields.length > 0 || classification.extracted_text.length > 0) && (
           <button
             onClick={() => setDetailsOpen(!detailsOpen)}
-            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
           >
-            {detailsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
             {detailsOpen ? "Hide details" : "Show details"}
           </button>
         )}
@@ -296,7 +297,7 @@ function ClassificationCard({ classification }: { classification: Classification
         {detailsOpen && (
           <div className="space-y-2 pt-1">
             {classification.fields.length > 0 && (
-              <div className="grid grid-cols-[80px_1fr] gap-y-1 text-[11px]">
+              <div className="grid grid-cols-[100px_1fr] gap-y-1 text-sm">
                 {classification.fields.map((f, i) => (
                   <div key={i} className="contents">
                     <span className="text-muted-foreground">{f.label}</span>
@@ -309,10 +310,10 @@ function ClassificationCard({ classification }: { classification: Classification
               <>
                 <Separator />
                 <div className="space-y-1">
-                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     Extracted Text
                   </div>
-                  <div className="text-[11px] text-muted-foreground space-y-0.5 font-mono">
+                  <div className="text-xs text-muted-foreground space-y-0.5 font-mono">
                     {classification.extracted_text.map((t, i) => (
                       <div key={i}>{t}</div>
                     ))}
@@ -328,13 +329,62 @@ function ClassificationCard({ classification }: { classification: Classification
 }
 
 // ---------------------------------------------------------------------------
+// OCR Processing Spinner (shown during image upload)
+// ---------------------------------------------------------------------------
+
+const OCR_STEPS = [
+  "Detecting image content...",
+  "Running optical character recognition...",
+  "Extracting product details...",
+  "Matching against catalog...",
+  "Finalizing classification...",
+]
+
+function OcrProcessingCard() {
+  const [progress, setProgress] = useState(0)
+  const [stepIdx, setStepIdx] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 95) return 95
+        return p + Math.random() * 12 + 3
+      })
+      setStepIdx((s) => (s < OCR_STEPS.length - 1 ? s + 1 : s))
+    }, 600)
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <Card className="border border-border">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <ScanSearch className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-semibold text-foreground">Processing image</span>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+            <span className="text-sm text-foreground">{OCR_STEPS[stepIdx]}</span>
+          </div>
+          <Progress value={Math.min(progress, 95)} className="h-2" />
+          <div className="text-xs text-muted-foreground">
+            {Math.round(Math.min(progress, 95))}% complete
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Validating spinner
 // ---------------------------------------------------------------------------
 
 function ValidatingSpinner() {
   return (
     <Card className="border border-border">
-      <CardContent className="p-3 space-y-3">
+      <CardContent className="p-4 space-y-3">
         <div className="flex items-center gap-2">
           <ScanSearch className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-semibold text-foreground">Verification in progress</span>
@@ -343,7 +393,7 @@ function ValidatingSpinner() {
         <div className="flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           <div className="space-y-1">
-            <div className="text-xs text-foreground">Running verification checks...</div>
+            <div className="text-sm text-foreground">Running verification checks...</div>
             <div className="text-xs text-muted-foreground">This usually takes a few seconds.</div>
           </div>
         </div>
@@ -437,15 +487,22 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         addMsg("user", `[Uploaded: ${file.name}]`)
       }
 
+      // Show OCR processing indicator
+      const ocrMarker = `__ocr_processing_${Date.now()}`
+      setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard />, timestamp: ocrMarker }])
+
       try {
         const result = await uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file)
         newFiles.push({ file, kind, imageId: result.image_id, previewUrl })
+        // Remove processing card and show classification
+        setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (result.classification) {
           addComponent("bot", <ClassificationCard classification={result.classification} />)
         } else {
           addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
         }
       } catch {
+        setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         addMsg("bot", `Failed to upload ${file.name}. Please try again.`)
       }
     }
@@ -524,8 +581,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
-          <img src="/sandisk-logo.svg" alt="SanDisk" className="h-5" />
-          <span className="text-sm font-semibold">Support Chat</span>
+          <img src="/sandisk-logo.svg" alt="SanDisk" className={expanded ? "h-7" : "h-5"} />
+          <span className={`${expanded ? "text-lg" : "text-sm"} font-semibold`}>Support Chat</span>
         </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setExpanded(!expanded)}>
