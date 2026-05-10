@@ -504,26 +504,29 @@ function OcrProcessingCard({ filename }: { filename: string }) {
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setStepIdx((s) => {
-        if (s < steps.length - 1) {
-          setCompletedSteps((prev) => [...prev, s])
-          return s + 1
+    let timeout: ReturnType<typeof setTimeout>
+    function scheduleNext(current: number) {
+      const delay = 1400 + Math.random() * 600
+      timeout = setTimeout(() => {
+        if (current < steps.length - 1) {
+          setCompletedSteps((prev) => [...prev, current])
+          setStepIdx(current + 1)
+          scheduleNext(current + 1)
         }
-        return s
-      })
-    }, 800 + Math.random() * 400)
-    return () => clearInterval(interval)
-  }, [steps.length])
+      }, delay)
+    }
+    scheduleNext(stepIdx)
+    return () => clearTimeout(timeout)
+  }, [])
 
   useEffect(() => {
     const target = steps[stepIdx]?.pct ?? 0
     const tick = setInterval(() => {
       setProgress((p) => {
         if (p >= target) { clearInterval(tick); return target }
-        return p + 2
+        return p + 1
       })
-    }, 50)
+    }, 80)
     return () => clearInterval(tick)
   }, [stepIdx, steps])
 
@@ -806,7 +809,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
 
       try {
         addLog("request", `POST /api/cases/${caseId}/images`, { kind, filename: file.name, mime_type: file.type, size: file.size })
-        const result = await uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file)
+        const minDelay = new Promise((r) => setTimeout(r, 8000 + Math.random() * 4000))
+        const [result] = await Promise.all([uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file), minDelay])
         addLog("response", `POST /api/cases/${caseId}/images`, result)
         newFiles.push({ file, kind, imageId: result.image_id, previewUrl })
         // Remove processing card and show classification
