@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, ArrowRight, Upload, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp } from "lucide-react"
+import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -260,12 +260,80 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
 // Classification card (shown after upload)
 // ---------------------------------------------------------------------------
 
-function ClassificationCard({ classification }: { classification: Classification }) {
+function ClassificationCard({ classification, previewUrl }: { classification: Classification; previewUrl?: string }) {
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const TypeIcon = classification.type === "invoice" || classification.type === "transcript"
-    ? Receipt
-    : Package
+  const isInvoice = classification.type === "invoice" || classification.type === "transcript"
+  const TypeIcon = isInvoice ? Receipt : Package
 
+  // For invoices with fields, show image + fields side by side
+  if (isInvoice && classification.fields.length > 0 && previewUrl) {
+    return (
+      <Card className="border border-border">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
+            <p className="text-sm text-foreground leading-relaxed">{classification.chat_message}</p>
+          </div>
+
+          <Separator />
+
+          <div className="flex gap-3">
+            <div className="shrink-0">
+              <img
+                src={previewUrl}
+                alt="Invoice"
+                className="w-[100px] h-[130px] object-cover rounded-md border border-border"
+              />
+            </div>
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Extracted Fields
+              </div>
+              <div className="grid grid-cols-[90px_1fr] gap-y-1 text-sm">
+                {classification.fields.map((f, i) => (
+                  <div key={i} className="contents">
+                    <span className="text-muted-foreground text-xs">{f.label}</span>
+                    <span className="font-medium text-foreground text-xs">{f.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {classification.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {classification.tags.map((tag, i) => (
+                <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 font-normal">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {classification.extracted_text.length > 0 && (
+            <>
+              <button
+                onClick={() => setDetailsOpen(!detailsOpen)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                {detailsOpen ? "Hide raw text" : "Show raw text"}
+              </button>
+              {detailsOpen && (
+                <div className="text-xs text-muted-foreground space-y-0.5 font-mono bg-muted/50 rounded-md p-2 max-h-[120px] overflow-y-auto">
+                  {classification.extracted_text.map((t, i) => (
+                    <div key={i}>{t}</div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Default layout for product/label/packaging images
   return (
     <Card className="border border-border">
       <CardContent className="p-4 space-y-2.5">
@@ -332,45 +400,111 @@ function ClassificationCard({ classification }: { classification: Classification
 // OCR Processing Spinner (shown during image upload)
 // ---------------------------------------------------------------------------
 
-const OCR_STEPS = [
-  "Detecting image content...",
-  "Running optical character recognition...",
-  "Extracting product details...",
-  "Matching against catalog...",
-  "Finalizing classification...",
+const OCR_STEPS_INVOICE = [
+  { label: "Analyzing document layout...", pct: 12 },
+  { label: "Detecting text regions...", pct: 25 },
+  { label: "Reading invoice header fields...", pct: 40 },
+  { label: "Extracting line items and totals...", pct: 58 },
+  { label: "Identifying serial numbers...", pct: 72 },
+  { label: "Verifying seller GSTIN...", pct: 85 },
+  { label: "Matching product to catalog...", pct: 95 },
 ]
 
-function OcrProcessingCard() {
-  const [progress, setProgress] = useState(0)
+const OCR_STEPS_LABEL = [
+  { label: "Detecting label region...", pct: 15 },
+  { label: "Enhancing text contrast...", pct: 30 },
+  { label: "Reading serial number...", pct: 50 },
+  { label: "Extracting model and SKU...", pct: 70 },
+  { label: "Verifying against product database...", pct: 88 },
+  { label: "Completing classification...", pct: 95 },
+]
+
+const OCR_STEPS_PRODUCT = [
+  { label: "Identifying product type...", pct: 18 },
+  { label: "Analyzing visual features...", pct: 38 },
+  { label: "Checking brand markings...", pct: 55 },
+  { label: "Reading visible text...", pct: 72 },
+  { label: "Matching to known product lines...", pct: 90 },
+  { label: "Finalizing...", pct: 95 },
+]
+
+const OCR_STEPS_PDF = [
+  { label: "Opening PDF document...", pct: 10 },
+  { label: "Rendering pages for OCR...", pct: 25 },
+  { label: "Extracting text content...", pct: 45 },
+  { label: "Identifying document type...", pct: 60 },
+  { label: "Parsing structured fields...", pct: 78 },
+  { label: "Cross-referencing records...", pct: 90 },
+  { label: "Completing analysis...", pct: 95 },
+]
+
+function getOcrSteps(filename: string): Array<{ label: string; pct: number }> {
+  const lower = filename.toLowerCase()
+  if (lower.endsWith(".pdf")) return OCR_STEPS_PDF
+  if (lower.includes("invoice") || lower.includes("receipt") || lower.includes("memo") || lower.includes("warranty_letter")) return OCR_STEPS_INVOICE
+  if (lower.includes("label") || lower.includes("back") || lower.includes("serial")) return OCR_STEPS_LABEL
+  return OCR_STEPS_PRODUCT
+}
+
+function OcrProcessingCard({ filename }: { filename: string }) {
+  const steps = getOcrSteps(filename)
   const [stepIdx, setStepIdx] = useState(0)
+  const [progress, setProgress] = useState(0)
+  const [completedSteps, setCompletedSteps] = useState<number[]>([])
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 95) return 95
-        return p + Math.random() * 12 + 3
+      setStepIdx((s) => {
+        if (s < steps.length - 1) {
+          setCompletedSteps((prev) => [...prev, s])
+          return s + 1
+        }
+        return s
       })
-      setStepIdx((s) => (s < OCR_STEPS.length - 1 ? s + 1 : s))
-    }, 600)
+    }, 800 + Math.random() * 400)
     return () => clearInterval(interval)
-  }, [])
+  }, [steps.length])
+
+  useEffect(() => {
+    const target = steps[stepIdx]?.pct ?? 0
+    const tick = setInterval(() => {
+      setProgress((p) => {
+        if (p >= target) { clearInterval(tick); return target }
+        return p + 2
+      })
+    }, 50)
+    return () => clearInterval(tick)
+  }, [stepIdx, steps])
 
   return (
     <Card className="border border-border">
       <CardContent className="p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <ScanSearch className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold text-foreground">Processing image</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ScanSearch className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">Processing: {filename.length > 30 ? filename.slice(0, 28) + "..." : filename}</span>
+          </div>
+          <span className="text-xs font-mono text-muted-foreground">{Math.round(progress)}%</span>
         </div>
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
-            <span className="text-sm text-foreground">{OCR_STEPS[stepIdx]}</span>
-          </div>
-          <Progress value={Math.min(progress, 95)} className="h-2" />
-          <div className="text-xs text-muted-foreground">
-            {Math.round(Math.min(progress, 95))}% complete
-          </div>
+        <Progress value={progress} className="h-2" />
+        <div className="space-y-1">
+          {steps.map((step, i) => {
+            const isDone = completedSteps.includes(i)
+            const isCurrent = i === stepIdx && !isDone
+            if (i > stepIdx) return null
+            return (
+              <div key={i} className="flex items-center gap-2">
+                {isDone ? (
+                  <CircleCheck className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                ) : isCurrent ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+                ) : null}
+                <span className={`text-xs ${isDone ? "text-muted-foreground line-through" : "text-foreground"}`}>
+                  {step.label}
+                </span>
+              </div>
+            )
+          })}
         </div>
       </CardContent>
     </Card>
@@ -487,9 +621,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         addMsg("user", `[Uploaded: ${file.name}]`)
       }
 
-      // Show OCR processing indicator
+      // Show OCR processing indicator with file-specific steps
       const ocrMarker = `__ocr_processing_${Date.now()}`
-      setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard />, timestamp: ocrMarker }])
+      setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
 
       try {
         const result = await uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file)
@@ -497,7 +631,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         // Remove processing card and show classification
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (result.classification) {
-          addComponent("bot", <ClassificationCard classification={result.classification} />)
+          addComponent("bot", <ClassificationCard classification={result.classification} previewUrl={previewUrl} />)
         } else {
           addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
         }
