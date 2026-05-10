@@ -260,7 +260,7 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
 // Classification card (shown after upload)
 // ---------------------------------------------------------------------------
 
-function ClassificationCard({ classification, previewUrl }: { classification: Classification; previewUrl?: string }) {
+function ClassificationCard({ classification, previewUrl, onImageClick }: { classification: Classification; previewUrl?: string; onImageClick?: (url: string, classification: Classification) => void }) {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const isInvoice = classification.type === "invoice" || classification.type === "transcript"
   const TypeIcon = isInvoice ? Receipt : Package
@@ -279,11 +279,16 @@ function ClassificationCard({ classification, previewUrl }: { classification: Cl
 
           <div className="flex gap-3">
             <div className="shrink-0">
-              <img
-                src={previewUrl}
-                alt="Invoice"
-                className="w-[100px] h-[130px] object-cover rounded-md border border-border"
-              />
+              <button
+                onClick={() => onImageClick?.(previewUrl, classification)}
+                className="cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <img
+                  src={previewUrl}
+                  alt="Invoice"
+                  className="w-[100px] h-[130px] object-cover rounded-md border border-border"
+                />
+              </button>
             </div>
             <div className="flex-1 min-w-0 space-y-1.5">
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -538,6 +543,110 @@ function ValidatingSpinner() {
 }
 
 // ---------------------------------------------------------------------------
+// Clickable image preview (user uploaded image thumbnail)
+// ---------------------------------------------------------------------------
+
+function ClickableImagePreview({ url, filename, onClick }: { url: string; filename: string; onClick: (url: string) => void }) {
+  return (
+    <div className="space-y-1">
+      <button onClick={() => onClick(url)} className="cursor-pointer hover:opacity-80 transition-opacity">
+        <img src={url} alt={filename} className="max-w-[200px] max-h-[160px] rounded-lg object-cover border border-border" />
+      </button>
+      <div className="text-xs opacity-80">{filename}</div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Image Lightbox (full-size image + OCR results side-by-side)
+// ---------------------------------------------------------------------------
+
+function ImageLightbox({ url, classification, onClose }: { url: string; classification?: Classification; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="relative bg-background rounded-2xl shadow-2xl border border-border max-w-[900px] max-h-[85vh] w-[90vw] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <span className="text-sm font-semibold text-foreground">Image Preview & OCR Results</span>
+          <button onClick={onClose} className="p-1 hover:opacity-70">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-auto p-4">
+          <div className={`flex gap-6 ${classification?.fields.length ? "" : "justify-center"}`}>
+            <div className="shrink-0">
+              <img
+                src={url}
+                alt="Uploaded document"
+                className="max-h-[65vh] max-w-[400px] w-auto rounded-lg border border-border object-contain"
+              />
+            </div>
+
+            {classification && classification.fields.length > 0 && (
+              <div className="flex-1 min-w-[250px] space-y-4">
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Document Type
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {classification.type.replace("_", " ")}
+                  </Badge>
+                </div>
+
+                <div>
+                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Extracted Fields
+                  </div>
+                  <div className="space-y-2">
+                    {classification.fields.map((f, i) => (
+                      <div key={i} className="flex justify-between items-baseline gap-3 py-1 border-b border-border last:border-0">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">{f.label}</span>
+                        <span className="text-sm font-medium text-foreground text-right">{f.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {classification.tags.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                      Tags
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {classification.tags.map((tag, i) => (
+                        <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 font-normal">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {classification.extracted_text.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                      Raw OCR Text
+                    </div>
+                    <div className="text-xs text-muted-foreground font-mono bg-muted/50 rounded-md p-3 max-h-[200px] overflow-y-auto space-y-0.5">
+                      {classification.extracted_text.map((t, i) => (
+                        <div key={i}>{t}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main ChatModal
 // ---------------------------------------------------------------------------
 
@@ -548,6 +657,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [caseId, setCaseId] = useState<string | null>(null)
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>>([])
   const [validationResult, setValidationResult] = useState<ValidateResponse | null>(null)
+  const [lightbox, setLightbox] = useState<{ url: string; classification?: Classification } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -609,13 +719,11 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       const isImage = file.type.startsWith("image/")
       const previewUrl = isImage ? URL.createObjectURL(file) : undefined
 
-      // Show image preview in chat
+      // Show image preview in chat (clickable to open lightbox)
       if (isImage && previewUrl) {
+        const capturedUrl = previewUrl
         addComponent("user", (
-          <div className="space-y-1">
-            <img src={previewUrl} alt={file.name} className="max-w-[200px] max-h-[160px] rounded-lg object-cover" />
-            <div className="text-xs opacity-80">{file.name}</div>
-          </div>
+          <ClickableImagePreview url={capturedUrl} filename={file.name} onClick={(url) => setLightbox({ url })} />
         ))
       } else {
         addMsg("user", `[Uploaded: ${file.name}]`)
@@ -631,7 +739,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         // Remove processing card and show classification
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (result.classification) {
-          addComponent("bot", <ClassificationCard classification={result.classification} previewUrl={previewUrl} />)
+          addComponent("bot", <ClassificationCard classification={result.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
         } else {
           addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
         }
@@ -711,6 +819,14 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     : "fixed bottom-6 right-6 z-50 flex flex-col w-[480px] h-[700px] rounded-2xl shadow-2xl border border-border bg-background"
 
   return (
+    <>
+    {lightbox && (
+      <ImageLightbox
+        url={lightbox.url}
+        classification={lightbox.classification}
+        onClose={() => setLightbox(null)}
+      />
+    )}
     <div className={modalClass}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
@@ -820,5 +936,6 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         )}
       </div>
     </div>
+    </>
   )
 }
