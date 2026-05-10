@@ -272,9 +272,12 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
 // ---------------------------------------------------------------------------
 
 function ClassificationCard({ classification, previewUrl, onImageClick }: { classification: Classification; previewUrl?: string; onImageClick?: (url: string, classification: Classification) => void }) {
-  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [specsExpanded, setSpecsExpanded] = useState(false)
+  const [rawOpen, setRawOpen] = useState(false)
   const isInvoice = classification.type === "invoice" || classification.type === "transcript"
   const TypeIcon = isInvoice ? Receipt : Package
+  const specs = classification.specifications ?? []
+  const SPEC_PREVIEW_COUNT = 4
 
   // For invoices with fields, show image + fields side by side
   if (isInvoice && classification.fields.length > 0 && previewUrl) {
@@ -303,7 +306,7 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
             </div>
             <div className="flex-1 min-w-0 space-y-1.5">
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Extracted Fields
+                Identifiers
               </div>
               <div className="grid grid-cols-[90px_1fr] gap-y-1 text-sm">
                 {classification.fields.map((f, i) => (
@@ -329,13 +332,13 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
           {classification.extracted_text.length > 0 && (
             <>
               <button
-                onClick={() => setDetailsOpen(!detailsOpen)}
+                onClick={() => setRawOpen(!rawOpen)}
                 className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
-                {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                {detailsOpen ? "Hide raw text" : "Show raw text"}
+                {rawOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                {rawOpen ? "Hide raw text" : "Show raw text"}
               </button>
-              {detailsOpen && (
+              {rawOpen && (
                 <div className="text-xs text-muted-foreground space-y-0.5 font-mono bg-muted/50 rounded-md p-2 max-h-[120px] overflow-y-auto">
                   {classification.extracted_text.map((t, i) => (
                     <div key={i}>{t}</div>
@@ -352,11 +355,64 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
   // Default layout for product/label/packaging images
   return (
     <Card className="border border-border">
-      <CardContent className="p-4 space-y-2.5">
+      <CardContent className="p-4 space-y-3">
         <div className="flex items-start gap-2">
           <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
           <p className="text-sm text-foreground leading-relaxed">{classification.chat_message}</p>
         </div>
+
+        {previewUrl && (
+          <button
+            onClick={() => onImageClick?.(previewUrl, classification)}
+            className="cursor-pointer hover:opacity-80 transition-opacity"
+          >
+            <img src={previewUrl} alt="Product" className="max-w-[120px] max-h-[100px] rounded-md border border-border object-cover" />
+          </button>
+        )}
+
+        {classification.fields.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Identifiers
+            </div>
+            <div className="grid grid-cols-[100px_1fr] gap-y-1">
+              {classification.fields.map((f, i) => (
+                <div key={i} className="contents">
+                  <span className="text-xs text-muted-foreground">{f.label}</span>
+                  <span className="text-xs font-medium text-foreground">{f.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {specs.length > 0 && (
+          <>
+            <Separator />
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Specifications
+              </div>
+              <div className="grid grid-cols-[120px_1fr] gap-y-1">
+                {(specsExpanded ? specs : specs.slice(0, SPEC_PREVIEW_COUNT)).map((s, i) => (
+                  <div key={i} className="contents">
+                    <span className="text-xs text-muted-foreground">{s.label}</span>
+                    <span className="text-xs font-medium text-foreground">{s.value}</span>
+                  </div>
+                ))}
+              </div>
+              {specs.length > SPEC_PREVIEW_COUNT && (
+                <button
+                  onClick={() => setSpecsExpanded(!specsExpanded)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  {specsExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {specsExpanded ? "Show less" : `Show all ${specs.length} specs`}
+                </button>
+              )}
+            </div>
+          </>
+        )}
 
         {classification.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -368,44 +424,23 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
           </div>
         )}
 
-        {(classification.fields.length > 0 || classification.extracted_text.length > 0) && (
-          <button
-            onClick={() => setDetailsOpen(!detailsOpen)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          >
-            {detailsOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            {detailsOpen ? "Hide details" : "Show details"}
-          </button>
-        )}
-
-        {detailsOpen && (
-          <div className="space-y-2 pt-1">
-            {classification.fields.length > 0 && (
-              <div className="grid grid-cols-[100px_1fr] gap-y-1 text-sm">
-                {classification.fields.map((f, i) => (
-                  <div key={i} className="contents">
-                    <span className="text-muted-foreground">{f.label}</span>
-                    <span className="font-medium text-foreground">{f.value}</span>
-                  </div>
+        {classification.extracted_text.length > 0 && (
+          <>
+            <button
+              onClick={() => setRawOpen(!rawOpen)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              {rawOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              {rawOpen ? "Hide raw text" : "Show raw text"}
+            </button>
+            {rawOpen && (
+              <div className="text-xs text-muted-foreground space-y-0.5 font-mono bg-muted/50 rounded-md p-2 max-h-[120px] overflow-y-auto">
+                {classification.extracted_text.map((t, i) => (
+                  <div key={i}>{t}</div>
                 ))}
               </div>
             )}
-            {classification.extracted_text.length > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Extracted Text
-                  </div>
-                  <div className="text-xs text-muted-foreground space-y-0.5 font-mono">
-                    {classification.extracted_text.map((t, i) => (
-                      <div key={i}>{t}</div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          </>
         )}
       </CardContent>
     </Card>
@@ -573,7 +608,8 @@ function ClickableImagePreview({ url, filename, onClick }: { url: string; filena
 // ---------------------------------------------------------------------------
 
 function ImageLightbox({ url, classification, onClose }: { url: string; classification?: Classification; onClose: () => void }) {
-  const hasOcr = classification && (classification.fields.length > 0 || classification.extracted_text.length > 0)
+  const specs = classification?.specifications ?? []
+  const hasData = classification && (classification.fields.length > 0 || specs.length > 0 || classification.extracted_text.length > 0)
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
@@ -597,9 +633,9 @@ function ImageLightbox({ url, classification, onClose }: { url: string; classifi
         </div>
 
         <div className="flex-1 overflow-hidden">
-          <div className={`flex h-full ${hasOcr ? "" : "justify-center"}`}>
+          <div className={`flex h-full ${hasData ? "" : "justify-center"}`}>
             {/* Left: Image */}
-            <div className="flex-1 min-w-0 p-4 overflow-auto flex items-start justify-center border-r border-border">
+            <div className={`flex-1 min-w-0 p-4 overflow-auto flex items-start justify-center ${hasData ? "border-r border-border" : ""}`}>
               <img
                 src={url}
                 alt="Uploaded document"
@@ -608,7 +644,7 @@ function ImageLightbox({ url, classification, onClose }: { url: string; classifi
             </div>
 
             {/* Right: OCR output in monospace */}
-            {hasOcr && (
+            {hasData && (
               <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
                 <div className="px-4 pt-3 pb-2 border-b border-border">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -618,13 +654,28 @@ function ImageLightbox({ url, classification, onClose }: { url: string; classifi
                 <div className="flex-1 overflow-auto p-4 font-mono text-xs bg-muted/30">
                   {classification!.fields.length > 0 && (
                     <div className="space-y-1 mb-4">
-                      <div className="text-muted-foreground mb-2">--- FIELDS ---</div>
+                      <div className="text-muted-foreground mb-2">--- IDENTIFIERS ---</div>
                       {classification!.fields.map((f, i) => {
                         const padded = (f.label + ":").padEnd(18, " ")
                         return (
                           <div key={i} className="text-foreground whitespace-pre">
                             <span className="text-muted-foreground">{padded}</span>
                             <span className="font-medium">{f.value}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {specs.length > 0 && (
+                    <div className="space-y-1 mb-4">
+                      <div className="text-muted-foreground mb-2">--- SPECIFICATIONS ---</div>
+                      {specs.map((s, i) => {
+                        const padded = (s.label + ":").padEnd(30, " ")
+                        return (
+                          <div key={i} className="text-foreground whitespace-pre">
+                            <span className="text-muted-foreground">{padded}</span>
+                            <span className="font-medium">{s.value}</span>
                           </div>
                         )
                       })}

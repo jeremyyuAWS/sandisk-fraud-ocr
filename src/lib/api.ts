@@ -27,6 +27,7 @@ export interface Classification {
   tags: string[]
   extracted_text: string[]
   fields: ClassificationField[]
+  specifications: ClassificationField[]
 }
 
 export interface UploadImageResponse {
