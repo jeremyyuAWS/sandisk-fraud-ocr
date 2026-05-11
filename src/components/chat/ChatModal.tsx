@@ -985,8 +985,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   if (!open) return null
 
   const modalClass = expanded
-    ? "fixed bottom-6 right-6 w-[50vw] h-[85vh] z-50 flex flex-col rounded-2xl shadow-2xl border border-border bg-background"
-    : "fixed bottom-6 right-6 z-50 flex flex-col w-[480px] h-[700px] rounded-2xl shadow-2xl border border-border bg-background"
+    ? "fixed bottom-6 right-6 w-[55vw] h-[92vh] z-50 flex flex-col rounded-2xl shadow-2xl border border-border bg-background"
+    : "fixed bottom-6 right-6 z-50 flex flex-col w-[480px] h-[85vh] max-h-[860px] rounded-2xl shadow-2xl border border-border bg-background"
 
   return (
     <>
