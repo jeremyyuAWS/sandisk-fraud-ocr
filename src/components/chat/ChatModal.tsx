@@ -813,6 +813,15 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     }
   }, [messages])
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      }
+    }, 500)
+    return () => clearInterval(interval)
+  }, [])
+
   // Initialize welcome message
   useEffect(() => {
     if (open && messages.length === 0) {
@@ -976,7 +985,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   if (!open) return null
 
   const modalClass = expanded
-    ? "fixed top-[25%] left-[25%] w-[50%] h-[50%] z-50 flex flex-col rounded-2xl shadow-2xl border border-border bg-background"
+    ? "fixed bottom-6 right-6 w-[50vw] h-[85vh] z-50 flex flex-col rounded-2xl shadow-2xl border border-border bg-background"
     : "fixed bottom-6 right-6 z-50 flex flex-col w-[480px] h-[700px] rounded-2xl shadow-2xl border border-border bg-background"
 
   return (
