@@ -107,7 +107,7 @@ function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean 
     return (
       <div className="flex flex-col items-end gap-1">
         <div
-          className={`${expanded ? "max-w-[60%]" : "max-w-[85%]"} ${
+          className={`${expanded ? "max-w-full" : "max-w-[85%]"} ${
             isComponent
               ? textSize
               : `bg-sandisk-red text-white rounded-full px-5 py-2.5 ${textSize}`
@@ -128,9 +128,9 @@ function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean 
       <BotAvatar />
       <div className="flex flex-col gap-1 min-w-0">
         <div
-          className={`${expanded ? "max-w-[60%]" : "max-w-[85%]"} ${
+          className={`${expanded ? "max-w-full w-full" : "max-w-[85%]"} ${
             isComponent
-              ? expanded ? "max-w-lg w-full" : "w-full"
+              ? "w-full"
               : `bg-secondary text-secondary-foreground rounded-2xl rounded-bl-sm px-4 py-2.5 ${textSize}`
           }`}
         >
@@ -976,7 +976,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   if (!open) return null
 
   const modalClass = expanded
-    ? "fixed inset-4 z-50 flex flex-col rounded-2xl shadow-2xl border border-border bg-background"
+    ? "fixed top-[25%] left-[25%] w-[50%] h-[50%] z-50 flex flex-col rounded-2xl shadow-2xl border border-border bg-background"
     : "fixed bottom-6 right-6 z-50 flex flex-col w-[480px] h-[700px] rounded-2xl shadow-2xl border border-border bg-background"
 
   return (
