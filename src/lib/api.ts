@@ -247,7 +247,9 @@ export interface CatalogSku {
 // ---------------------------------------------------------------------------
 
 export async function getHealth(): Promise<HealthResponse> {
-  const res = await fetch(`${API_BASE}/api/health`)
+  const res = await fetch(`${API_BASE}/api/health`, {
+    signal: AbortSignal.timeout(5000),
+  })
   if (!res.ok) throw new Error(`Health check failed: ${res.status}`)
   return res.json()
 }
@@ -278,6 +280,7 @@ export async function uploadImage(
   const res = await fetch(`${API_BASE}/api/cases/${caseId}/images`, {
     method: "POST",
     body: form,
+    signal: AbortSignal.timeout(30000),
   })
   if (!res.ok) throw new Error(`Upload image failed: ${res.status}`)
   return res.json()
@@ -286,7 +289,7 @@ export async function uploadImage(
 export async function validateCase(caseId: string): Promise<ValidateResponse> {
   const res = await fetch(`${API_BASE}/api/cases/${caseId}/validate`, {
     method: "POST",
-    signal: AbortSignal.timeout(90000),
+    signal: AbortSignal.timeout(45000),
   })
   if (!res.ok) throw new Error(`Validate failed: ${res.status}`)
   return res.json()

@@ -13,6 +13,7 @@ import {
   getAgentQueue,
   getAgentCases,
   getAgentOverrideStats,
+  getCatalogSkus,
   getCase,
   getImageUrl,
   submitAgentDecision,
@@ -20,6 +21,7 @@ import {
   type QueueReview,
   type AgentCase,
   type CaseRecord,
+  type CatalogSku,
   type ValidationCheck,
   type Indicator,
   type V2Verdict,
@@ -187,10 +189,12 @@ function AllCasesList({
 
 function CaseDetailView({
   caseId,
+  catalogSkus,
   onBack,
   onDecisionMade,
 }: {
   caseId: string
+  catalogSkus: CatalogSku[]
   onBack: () => void
   onDecisionMade: () => void
 }) {
@@ -236,6 +240,10 @@ function CaseDetailView({
   const indicators = validation?.indicators || []
   const checks = validation?.checks || caseData.summary?.checks || []
   const matchedSku = validation?.matched_sku
+  const v2Sku = caseData.summary?.v2?.identified_sku
+  const catalogMatch = v2Sku?.family_prefix
+    ? catalogSkus.find((s) => s.prefix === v2Sku.family_prefix)
+    : undefined
 
   return (
     <div className="space-y-4">
@@ -309,7 +317,7 @@ function CaseDetailView({
           )}
 
           {/* Matched SKU */}
-          {matchedSku && (
+          {(matchedSku || catalogMatch) && (
             <Card className="border border-border">
               <CardHeader className="pb-2 pt-4 px-4">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -319,13 +327,13 @@ function CaseDetailView({
               <CardContent className="px-4 pb-4 text-xs">
                 <div className="grid grid-cols-[100px_1fr] gap-y-1.5">
                   <span className="text-muted-foreground">Product</span>
-                  <span className="font-medium">{matchedSku.product_name}</span>
+                  <span className="font-medium">{matchedSku?.product_name ?? catalogMatch?.product_name ?? "—"}</span>
                   <span className="text-muted-foreground">SKU Prefix</span>
-                  <span className="font-mono">{matchedSku.prefix}</span>
+                  <span className="font-mono">{matchedSku?.prefix ?? catalogMatch?.prefix ?? "—"}</span>
                   <span className="text-muted-foreground">Warranty</span>
-                  <span>{matchedSku.warranty}</span>
+                  <span>{matchedSku?.warranty ?? catalogMatch?.warranty ?? "—"}</span>
                   <span className="text-muted-foreground">Category</span>
-                  <span>{matchedSku.category}</span>
+                  <span>{matchedSku?.category ?? catalogMatch?.category ?? "—"}</span>
                 </div>
               </CardContent>
             </Card>
@@ -722,6 +730,7 @@ export function AgentWorkspace({ onBack }: AgentWorkspaceProps) {
   const [loadingCases, setLoadingCases] = useState(true)
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
   const [overrideStats, setOverrideStats] = useState<OverrideStats | null>(null)
+  const [catalogSkus, setCatalogSkus] = useState<CatalogSku[]>([])
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function fetchQueue() {
@@ -748,6 +757,7 @@ export function AgentWorkspace({ onBack }: AgentWorkspaceProps) {
     fetchQueue()
     fetchCases()
     fetchStats()
+    getCatalogSkus().then(setCatalogSkus).catch(() => {})
     pollRef.current = setInterval(() => {
       fetchQueue()
       fetchCases()
@@ -790,6 +800,7 @@ export function AgentWorkspace({ onBack }: AgentWorkspaceProps) {
         {selectedCaseId ? (
           <CaseDetailView
             caseId={selectedCaseId}
+            catalogSkus={catalogSkus}
             onBack={() => setSelectedCaseId(null)}
             onDecisionMade={handleDecisionMade}
           />

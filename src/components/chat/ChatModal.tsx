@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
+import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText, ZoomIn, ZoomOut, RotateCcw, WifiOff, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -11,6 +11,7 @@ import {
   uploadImage,
   validateCase,
   escalateCase,
+  getHealth,
   humanizeVerdictReason,
   type ValidateResponse,
   type CustomerSummary,
@@ -151,7 +152,7 @@ function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean 
 // Validation Result Card (renders customer_summary)
 // ---------------------------------------------------------------------------
 
-function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
+function ValidationResultCard({ summary, onGapAction }: { summary: CustomerSummary; onGapAction?: (gap: Gap) => void }) {
   const Icon =
     summary.decision === "auto_approve" ? ShieldCheck
     : summary.decision === "auto_reject" ? ShieldAlert
@@ -266,7 +267,7 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
           </>
         )}
 
-        {summary.v2 && <V2VerdictSection v2={summary.v2} />}
+        {summary.v2 && <V2VerdictSection v2={summary.v2} onGapAction={onGapAction} />}
       </CardContent>
     </Card>
   )
@@ -276,7 +277,7 @@ function ValidationResultCard({ summary }: { summary: CustomerSummary }) {
 // v2 Verdict section (rendered inside ValidationResultCard)
 // ---------------------------------------------------------------------------
 
-function V2VerdictSection({ v2 }: { v2: V2Verdict }) {
+function V2VerdictSection({ v2, onGapAction }: { v2: V2Verdict; onGapAction?: (gap: Gap) => void }) {
   return (
     <>
       {v2.reason && (
@@ -307,13 +308,14 @@ function V2VerdictSection({ v2 }: { v2: V2Verdict }) {
           </div>
           <div className="space-y-1.5">
             {v2.gaps.map((gap: Gap, i: number) => (
-              <div key={i} className="flex items-start gap-2 text-xs">
-                <Clock className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
-                <div className="flex-1 min-w-0">
-                  <span className="text-foreground font-medium">{gap.missing_data_field.replace(/_/g, " ")}</span>
-                  <span className="text-muted-foreground ml-1">— {gap.follow_up_action.replace(/_/g, " ")}</span>
-                </div>
-              </div>
+              <button
+                key={i}
+                onClick={() => onGapAction?.(gap)}
+                className="flex items-center gap-2 text-xs w-full text-left px-2.5 py-1.5 rounded-md border border-amber-200 bg-amber-50/50 hover:bg-amber-100 transition-colors cursor-pointer"
+              >
+                <Paperclip className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                <span className="text-amber-800 font-medium">{formatGapAction(gap.follow_up_action)}</span>
+              </button>
             ))}
           </div>
         </>
@@ -336,6 +338,17 @@ function V2VerdictSection({ v2 }: { v2: V2Verdict }) {
       )}
     </>
   )
+}
+
+function formatGapAction(action: string): string {
+  const mapped: Record<string, string> = {
+    request_sharper_back_of_drive_photo: "Add a clearer photo of the back",
+    request_proof_of_purchase: "Upload proof of purchase",
+    request_serial_number_photo: "Upload a photo showing the serial number",
+    request_packaging_photo: "Upload packaging photo",
+    request_front_photo: "Upload a front photo of the product",
+  }
+  return mapped[action] ?? action.replace(/_/g, " ").replace(/^request /, "Upload: ")
 }
 
 // ---------------------------------------------------------------------------
@@ -870,6 +883,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [lightbox, setLightbox] = useState<{ url: string; classification?: Classification } | null>(null)
   const [activeTab, setActiveTab] = useState<"chat" | "logs">("chat")
   const [logs, setLogs] = useState<LogEntry[]>([])
+  const [connectionStatus, setConnectionStatus] = useState<"online" | "offline" | "error">("online")
+  const [lastError, setLastError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const logsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -892,6 +907,28 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     }, 500)
     return () => clearInterval(interval)
   }, [])
+
+  // Connection monitoring
+  useEffect(() => {
+    if (!open) return
+    let mounted = true
+    function checkHealth() {
+      getHealth()
+        .then(() => { if (mounted) { setConnectionStatus("online"); setLastError(null) } })
+        .catch((err) => {
+          if (!mounted) return
+          if (err instanceof TypeError || err.name === "AbortError") {
+            setConnectionStatus("offline")
+          } else {
+            setConnectionStatus("error")
+            setLastError(String(err.message || err))
+          }
+        })
+    }
+    checkHealth()
+    const interval = setInterval(checkHealth, 30000)
+    return () => { mounted = false; clearInterval(interval) }
+  }, [open])
 
   // Initialize welcome message
   useEffect(() => {
@@ -1009,7 +1046,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       setValidationResult(result)
       setMessages((prev) => {
         const without = prev.filter((_, i) => i !== spinnerIdx)
-        return [...without, { from: "bot" as const, component: <ValidationResultCard summary={result.customer_summary} />, timestamp: now() }]
+        return [...without, { from: "bot" as const, component: <ValidationResultCard summary={result.customer_summary} onGapAction={handleGapAction} />, timestamp: now() }]
       })
       setStep("result")
     } catch (err) {
@@ -1033,6 +1070,25 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       addLog("response", `POST /api/cases/${caseId}/escalate`, { error: String(err) })
       addMsg("bot", "We couldn't escalate right now. Please try again.")
     }
+  }
+
+  function handleGapAction(gap: Gap) {
+    addMsg("bot", `Please upload: **${formatGapAction(gap.follow_up_action)}**`)
+    setStep("upload-preview")
+    setTimeout(() => fileInputRef.current?.click(), 100)
+  }
+
+  function getResultPrimaryLabel(): string {
+    const action = validationResult?.customer_summary?.v2?.recommended_next_action
+    if (!action) return "Speak to Agent"
+    const labels: Record<string, string> = {
+      escalate_to_damage_policy_review: "Speak to Damage Specialist",
+      escalate_to_fraud_review: "Speak to Fraud Specialist",
+      escalate_to_agent: "Speak to Agent",
+      request_more_info: "Upload More Info",
+      auto_close: "Done",
+    }
+    return labels[action] ?? "Speak to Agent"
   }
 
   function handleReset() {
@@ -1109,6 +1165,29 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           </button>
         </div>
       </div>
+
+      {/* Connection status banner */}
+      {connectionStatus !== "online" && (
+        <div className={`px-4 py-2 flex items-center gap-2 text-xs shrink-0 ${connectionStatus === "offline" ? "bg-gray-100 text-gray-700" : "bg-red-50 text-red-700"}`}>
+          {connectionStatus === "offline" ? (
+            <>
+              <WifiOff className="h-3.5 w-3.5" />
+              <span className="flex-1">Backend unreachable. Check your connection.</span>
+              <button onClick={() => getHealth().then(() => { setConnectionStatus("online"); setLastError(null) }).catch(() => {})} className="flex items-center gap-1 px-2 py-0.5 rounded border border-current hover:bg-gray-200 transition-colors cursor-pointer">
+                <RefreshCw className="h-3 w-3" /> Retry
+              </button>
+            </>
+          ) : (
+            <>
+              <TriangleAlert className="h-3.5 w-3.5" />
+              <span className="flex-1">{lastError || "Server error. You can retry your last action."}</span>
+              <button onClick={() => getHealth().then(() => { setConnectionStatus("online"); setLastError(null) }).catch(() => {})} className="flex items-center gap-1 px-2 py-0.5 rounded border border-current hover:bg-red-100 transition-colors cursor-pointer">
+                <RefreshCw className="h-3 w-3" /> Retry
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Chat Messages */}
       <div ref={scrollRef} className={`flex-1 overflow-y-auto px-4 py-4 space-y-4 ${activeTab !== "chat" ? "hidden" : ""}`}>
@@ -1210,7 +1289,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         {step === "result" && (
           <div className="flex gap-2">
             <Button variant="outline" size="sm" className="flex-1" onClick={handleEscalate}>
-              Speak to Agent
+              {getResultPrimaryLabel()}
             </Button>
             <Button variant="outline" size="sm" onClick={handleReset}>
               New Case
