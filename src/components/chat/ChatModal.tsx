@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText, ZoomIn, ZoomOut, RotateCcw, WifiOff, RefreshCw } from "lucide-react"
+import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText, ZoomIn, ZoomOut, RotateCcw, WifiOff, RefreshCw, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -885,6 +885,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [connectionStatus, setConnectionStatus] = useState<"online" | "offline" | "error">("online")
   const [lastError, setLastError] = useState<string | null>(null)
+  const [textInput, setTextInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const logsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1075,6 +1076,21 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     addMsg("bot", `Please upload: **${formatGapAction(gap.follow_up_action)}**`)
     setStep("upload-preview")
     setTimeout(() => fileInputRef.current?.click(), 100)
+  }
+
+  function handleTextSend() {
+    const text = textInput.trim()
+    if (!text) return
+    addMsg("user", text)
+    setTextInput("")
+    if (step === "issue-select") {
+      const lower = text.toLowerCase()
+      if (lower.includes("warrant")) handleIssueSelect("warranty")
+      else if (lower.includes("authent") || lower.includes("fake") || lower.includes("genuine")) handleIssueSelect("authentication")
+      else if (lower.includes("replac") || lower.includes("status")) handleIssueSelect("replacement_status")
+      else if (lower.includes("troubleshoot") || lower.includes("not working") || lower.includes("issue")) handleIssueSelect("troubleshooting")
+      else handleIssueSelect("warranty")
+    }
   }
 
   function getResultPrimaryLabel(): string {
@@ -1299,6 +1315,26 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         {step === "escalated" && (
           <div className="text-center text-xs text-muted-foreground py-2">
             Case escalated to specialist. You can close this chat.
+          </div>
+        )}
+
+        {step !== "validating" && step !== "escalated" && (
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleTextSend() }}
+              placeholder="Type a message..."
+              className="flex-1 min-w-0 rounded-md border border-border bg-background px-3 py-1.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <button
+              onClick={handleTextSend}
+              disabled={!textInput.trim()}
+              className="p-1.5 rounded-md hover:bg-muted disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+            >
+              <Send className="h-4 w-4" />
+            </button>
           </div>
         )}
       </div>
