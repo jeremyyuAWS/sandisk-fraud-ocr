@@ -893,20 +893,19 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     setLogs((prev) => [...prev, { timestamp: new Date().toISOString(), direction, endpoint, data }])
   }
 
+  const userScrolledRef = useRef(false)
+
+  function handleChatScroll() {
+    if (!scrollRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+    userScrolledRef.current = scrollHeight - scrollTop - clientHeight > 60
+  }
+
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && !userScrolledRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-      }
-    }, 500)
-    return () => clearInterval(interval)
-  }, [])
 
   // Connection monitoring
   useEffect(() => {
@@ -1190,7 +1189,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       )}
 
       {/* Chat Messages */}
-      <div ref={scrollRef} className={`flex-1 overflow-y-auto px-4 py-4 space-y-4 ${activeTab !== "chat" ? "hidden" : ""}`}>
+      <div ref={scrollRef} onScroll={handleChatScroll} className={`flex-1 overflow-y-auto px-4 py-4 space-y-4 ${activeTab !== "chat" ? "hidden" : ""}`}>
         {messages.map((msg, i) => (
           <MessageBubble key={i} msg={msg} expanded={expanded} />
         ))}
