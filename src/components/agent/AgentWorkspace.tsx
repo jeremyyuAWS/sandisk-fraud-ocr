@@ -12,14 +12,18 @@ import { toast } from "sonner"
 import {
   getAgentQueue,
   getAgentCases,
+  getAgentOverrideStats,
   getCase,
   getImageUrl,
   submitAgentDecision,
+  humanizeVerdictReason,
   type QueueReview,
   type AgentCase,
   type CaseRecord,
   type ValidationCheck,
   type Indicator,
+  type V2Verdict,
+  type OverrideStats,
 } from "@/lib/api"
 
 interface AgentWorkspaceProps {
@@ -363,6 +367,11 @@ function CaseDetailView({
             </Card>
           )}
 
+          {/* v2 Verdict Details */}
+          {caseData.summary?.v2 && (
+            <V2DetailPanel v2={caseData.summary.v2} caseId={caseData.case_id} />
+          )}
+
           {/* Decision actions */}
           {(caseData.status === "validated" || caseData.status === "escalated" || caseData.status === "open") && (
             <Card className="border border-border">
@@ -429,6 +438,280 @@ function CaseDetailView({
 }
 
 // ---------------------------------------------------------------------------
+// v2 Detail Panel (agent-facing)
+// ---------------------------------------------------------------------------
+
+function V2DetailPanel({ v2, caseId }: { v2: V2Verdict; caseId: string }) {
+  return (
+    <div className="space-y-4">
+      {/* SKU identification */}
+      {(v2.identified_sku.family_prefix || v2.identified_sku.full_sku) && (
+        <Card className="border border-border">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold">Detected SKU</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 text-xs">
+            <div className="grid grid-cols-[100px_1fr] gap-y-1.5">
+              {v2.identified_sku.family_prefix && (
+                <>
+                  <span className="text-muted-foreground">Family</span>
+                  <span className="font-mono font-medium">{v2.identified_sku.family_prefix}</span>
+                </>
+              )}
+              {v2.identified_sku.full_sku && (
+                <>
+                  <span className="text-muted-foreground">Full SKU</span>
+                  <span className="font-mono font-medium">{v2.identified_sku.full_sku}</span>
+                </>
+              )}
+              <span className="text-muted-foreground">Family</span>
+              <span className="capitalize">{v2.product_family.replace(/_/g, " ")}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Playbook */}
+      {v2.playbook_used && (
+        <Card className="border border-border">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold">Playbook Used</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <Badge variant="outline" className="text-xs font-mono">
+              {v2.playbook_used}
+            </Badge>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Verdict reasons */}
+      {v2.verdict_reasons.length > 0 && (
+        <Card className="border border-border">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold">Verdict Reasons</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-1.5">
+            {v2.verdict_reasons.map((code, i) => (
+              <div key={i} className="space-y-0.5">
+                <div className="text-xs font-mono text-foreground">{code}</div>
+                <div className="text-xs text-muted-foreground">{humanizeVerdictReason(code)}</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Damage */}
+      {v2.damage_observed && (
+        <Card className="border border-amber-200 bg-amber-50/50">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-800">
+              <AlertTriangle className="h-4 w-4" /> Damage Detected
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <p className="text-xs text-amber-700">{v2.damage_description ?? "Physical damage observed."}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Counterfeit tells */}
+      {v2.counterfeit_tells_matched.length > 0 && (
+        <Card className="border border-red-200 bg-red-50/50">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold text-red-700 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" /> Counterfeit Tells
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-2">
+            {v2.counterfeit_tells_matched.map((match, i) => (
+              <div key={i} className="border border-red-200 rounded-md p-2 space-y-1">
+                <div className="text-xs font-mono text-red-700">{match.counterfeit_id}</div>
+                <div className="text-xs text-muted-foreground">
+                  {match.tells_matched_count} tell(s) matched: {match.tells_matched.join(", ")}
+                </div>
+                {match.page_ref != null && (
+                  <div className="text-xs text-muted-foreground">
+                    Auth guide page: {Array.isArray(match.page_ref) ? match.page_ref.join(", ") : match.page_ref}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Fraud correlations */}
+      {v2.fraud_correlations.length > 0 && (
+        <Card className="border border-red-300 bg-red-50/70">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold text-red-800 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" /> Fraud Ring Correlation
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-2">
+            {v2.fraud_correlations.map((fc, i) => (
+              <div key={i} className="border border-red-200 rounded-md p-2 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-mono text-red-700">{fc.pattern.replace(/_/g, " ")}</span>
+                  <Badge variant="outline" className="text-[10px] border-red-300 text-red-700 capitalize">{fc.severity.replace(/_/g, " ")}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{fc.detail}</p>
+                <div className="text-xs text-muted-foreground">
+                  Linked cases: {fc.matched_case_ids.join(", ")}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Values: {fc.matched_values.join(", ")}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* POP Validation */}
+      {v2.pop_validation && Object.keys(v2.pop_validation).length > 0 && (
+        <Card className="border border-border">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold">Proof of Purchase Validation</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 text-xs">
+            <div className="grid grid-cols-[140px_1fr] gap-y-1.5">
+              {v2.pop_validation.vendor_name != null && (
+                <>
+                  <span className="text-muted-foreground">Vendor</span>
+                  <span className="font-medium">{v2.pop_validation.vendor_name}</span>
+                </>
+              )}
+              {v2.pop_validation.vendor_gstin != null && (
+                <>
+                  <span className="text-muted-foreground">GSTIN</span>
+                  <span className="font-mono">{v2.pop_validation.vendor_gstin}</span>
+                </>
+              )}
+              {v2.pop_validation.vendor_authorized != null && (
+                <>
+                  <span className="text-muted-foreground">Authorized?</span>
+                  <span className={v2.pop_validation.vendor_authorized ? "text-green-600 font-medium" : "text-red-500 font-medium"}>
+                    {v2.pop_validation.vendor_authorized ? "Yes" : "No"}
+                  </span>
+                </>
+              )}
+              {v2.pop_validation.product_match != null && (
+                <>
+                  <span className="text-muted-foreground">Product match?</span>
+                  <span className={v2.pop_validation.product_match ? "text-green-600 font-medium" : "text-red-500 font-medium"}>
+                    {v2.pop_validation.product_match ? "Yes" : "No"}
+                  </span>
+                </>
+              )}
+              {v2.pop_validation.date_plausible != null && (
+                <>
+                  <span className="text-muted-foreground">Date plausible?</span>
+                  <span className={v2.pop_validation.date_plausible ? "text-green-600 font-medium" : "text-red-500 font-medium"}>
+                    {v2.pop_validation.date_plausible ? "Yes" : "No"}
+                  </span>
+                </>
+              )}
+              {v2.pop_validation.time_delta_days != null && (
+                <>
+                  <span className="text-muted-foreground">Purchase age</span>
+                  <span>{v2.pop_validation.time_delta_days} days</span>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Refinement trace */}
+      {v2.refinement.attempted && (
+        <Card className="border border-border">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold">OCR Refinement</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 text-xs space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Status:</span>
+              <span className={v2.refinement.succeeded ? "text-green-600 font-medium" : "text-amber-600 font-medium"}>
+                {v2.refinement.succeeded ? "Succeeded" : "No new fields found"}
+              </span>
+            </div>
+            {v2.refinement.fields_added.length > 0 && (
+              <div className="text-muted-foreground">
+                Fields added on 2nd pass: <span className="font-mono text-foreground">{v2.refinement.fields_added.join(", ")}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Gaps */}
+      {v2.gaps.length > 0 && (
+        <Card className="border border-border">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold">Data Gaps</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 space-y-2">
+            {v2.gaps.map((gap, i) => (
+              <div key={i} className="text-xs space-y-0.5">
+                <div className="font-medium text-foreground">{gap.missing_data_field.replace(/_/g, " ")}</div>
+                <div className="text-muted-foreground">Action: {gap.follow_up_action.replace(/_/g, " ")}</div>
+                {gap.affected_checks.length > 0 && (
+                  <div className="text-muted-foreground">Affects: {gap.affected_checks.join(", ")}</div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recommended next action */}
+      {v2.recommended_next_action && (
+        <div className="text-xs text-muted-foreground">
+          Recommended action: <span className="font-mono text-foreground">{v2.recommended_next_action.replace(/_/g, " ")}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Override stats card
+// ---------------------------------------------------------------------------
+
+function OverrideStatsCard({ stats }: { stats: OverrideStats | null }) {
+  if (!stats || stats.total === 0) return null
+  return (
+    <Card className="border border-border">
+      <CardHeader className="pb-2 pt-4 px-4">
+        <CardTitle className="text-sm font-semibold">AI vs Operator Agreement</CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4 text-xs space-y-2">
+        <div className="grid grid-cols-[140px_1fr] gap-y-1">
+          <span className="text-muted-foreground">Total reviews</span>
+          <span className="font-medium">{stats.total}</span>
+          <span className="text-muted-foreground">Request-info agreement</span>
+          <span className="font-medium">{Math.round(stats.agreement_rate_request_info * 100)}%</span>
+        </div>
+        {stats.top_v2_reasons_when_overridden.length > 0 && (
+          <div className="space-y-1 mt-2">
+            <div className="text-muted-foreground">Top reasons when overridden:</div>
+            {stats.top_v2_reasons_when_overridden.slice(0, 5).map((r, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <span className="font-mono">{r.reason.replace(/_/g, " ")}</span>
+                <Badge variant="outline" className="text-[10px]">{r.count}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -438,6 +721,7 @@ export function AgentWorkspace({ onBack }: AgentWorkspaceProps) {
   const [loadingQueue, setLoadingQueue] = useState(true)
   const [loadingCases, setLoadingCases] = useState(true)
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
+  const [overrideStats, setOverrideStats] = useState<OverrideStats | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   function fetchQueue() {
@@ -454,13 +738,20 @@ export function AgentWorkspace({ onBack }: AgentWorkspaceProps) {
       .finally(() => setLoadingCases(false))
   }
 
+  function fetchStats() {
+    getAgentOverrideStats()
+      .then(setOverrideStats)
+      .catch(() => {})
+  }
+
   useEffect(() => {
     fetchQueue()
     fetchCases()
+    fetchStats()
     pollRef.current = setInterval(() => {
       fetchQueue()
       fetchCases()
-    }, 5000)
+    }, 15000)
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
@@ -503,18 +794,23 @@ export function AgentWorkspace({ onBack }: AgentWorkspaceProps) {
             onDecisionMade={handleDecisionMade}
           />
         ) : (
-          <Tabs defaultValue="queue">
-            <TabsList>
-              <TabsTrigger value="queue">Review Queue ({reviews.length})</TabsTrigger>
-              <TabsTrigger value="all">All Cases ({allCases.length})</TabsTrigger>
-            </TabsList>
-            <TabsContent value="queue" className="mt-4">
-              <QueueList reviews={reviews} loading={loadingQueue} onSelect={setSelectedCaseId} />
-            </TabsContent>
-            <TabsContent value="all" className="mt-4">
-              <AllCasesList cases={allCases} loading={loadingCases} onSelect={setSelectedCaseId} />
-            </TabsContent>
-          </Tabs>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+            <Tabs defaultValue="queue">
+              <TabsList>
+                <TabsTrigger value="queue">Review Queue ({reviews.length})</TabsTrigger>
+                <TabsTrigger value="all">All Cases ({allCases.length})</TabsTrigger>
+              </TabsList>
+              <TabsContent value="queue" className="mt-4">
+                <QueueList reviews={reviews} loading={loadingQueue} onSelect={setSelectedCaseId} />
+              </TabsContent>
+              <TabsContent value="all" className="mt-4">
+                <AllCasesList cases={allCases} loading={loadingCases} onSelect={setSelectedCaseId} />
+              </TabsContent>
+            </Tabs>
+            <div className="space-y-4">
+              <OverrideStatsCard stats={overrideStats} />
+            </div>
+          </div>
         )}
       </div>
     </div>

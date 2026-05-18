@@ -5,6 +5,10 @@ const API_BASE =
 // Types
 // ---------------------------------------------------------------------------
 
+export type Decision = "auto_approve" | "auto_reject" | "human_review"
+export type RiskBand = "Low" | "Medium" | "High"
+export type ImageKind = "product" | "label" | "packaging" | "pop"
+
 export interface HealthResponse {
   ok: boolean
   catalog: { skus: number; drives: number }
@@ -49,21 +53,87 @@ export interface ExtractedImageFields {
   fields: ClassificationField[]
 }
 
+// ---------------------------------------------------------------------------
+// v2 Verdict types
+// ---------------------------------------------------------------------------
+
+export interface IdentifiedSku {
+  family_prefix: string | null
+  full_sku: string | null
+}
+
+export interface CounterfeitMatch {
+  counterfeit_id: string
+  tells_matched_count: number
+  tells_matched: string[]
+  page_ref: number | number[] | null
+}
+
+export interface PopValidation {
+  vendor_authorized?: boolean
+  vendor_name?: string
+  vendor_gstin?: string
+  product_match?: boolean
+  date_plausible?: boolean
+  time_delta_days?: number
+}
+
+export interface FraudCorrelation {
+  pattern: "identical_batch_code" | "sequential_serials"
+  severity: "high" | "medium_high" | "medium"
+  matched_case_ids: string[]
+  matched_values: string[]
+  detail: string
+}
+
+export interface Gap {
+  missing_data_field: string
+  affected_checks: string[]
+  follow_up_action: string
+}
+
+export interface RefinementMeta {
+  attempted: boolean
+  succeeded: boolean
+  fields_added: string[]
+}
+
+export interface V2Verdict {
+  verdict_reasons: string[]
+  damage_observed: boolean
+  damage_description: string | null
+  product_family: string
+  identified_sku: IdentifiedSku
+  playbook_used: string | null
+  counterfeit_tells_matched: CounterfeitMatch[]
+  pop_validation: PopValidation
+  fraud_correlations: FraudCorrelation[]
+  refinement: RefinementMeta
+  gaps: Gap[]
+  reason: string
+  recommended_next_action: string
+}
+
+// ---------------------------------------------------------------------------
+// Customer summary (v1 + optional v2)
+// ---------------------------------------------------------------------------
+
 export interface CustomerSummary {
   headline: string
   body: string
-  risk_band: "Low" | "Medium" | "High"
-  decision: "auto_approve" | "auto_reject" | "human_review"
+  risk_band: RiskBand
+  decision: Decision
   checks: ValidationCheck[]
-  warranty?: string
+  warranty?: string | null
   extracted?: ExtractedImageFields[]
   next_steps: string[]
+  v2?: V2Verdict
 }
 
 export interface ValidateResponse {
   case_id: string
-  validation_id: string
-  decision: "auto_approve" | "auto_reject" | "human_review"
+  validation_id: string | null
+  decision: Decision
   risk_score: number
   customer_summary: CustomerSummary
 }
@@ -71,7 +141,7 @@ export interface ValidateResponse {
 export interface CaseImage {
   image_id: string
   case_id: string
-  kind: "product" | "label" | "packaging" | "pop"
+  kind: ImageKind
   filename: string
   mime_type: string
   uploaded_at: string
@@ -111,7 +181,7 @@ export interface CaseRecord {
   created_at: string
   issue_type: string
   status: "open" | "validated" | "approved" | "rejected" | "escalated"
-  decision: "auto_approve" | "auto_reject" | "human_review" | null
+  decision: Decision | null
   risk_score: number
   summary: CustomerSummary | null
   images: CaseImage[]
@@ -136,6 +206,40 @@ export interface AgentCase {
   decision: string | null
   risk_score: number
   summary: CustomerSummary | null
+}
+
+// ---------------------------------------------------------------------------
+// Overrides / learning-loop types
+// ---------------------------------------------------------------------------
+
+export interface OverrideRow {
+  case_id: string
+  action: "approve" | "reject" | "request_info" | null
+  agent: string | null
+  notes: string | null
+  queued_at: string
+  resolved_at: string
+  rule_set_version: "v1" | "v2"
+  v2_verdict: Decision | null
+  v2_verdict_reasons: string[]
+  v2_risk_score: number | null
+  agreement: string | null
+}
+
+export interface OverrideStats {
+  total: number
+  by_operator_action: Record<string, number>
+  by_v2_verdict: Record<string, number>
+  by_rule_set_version: Record<string, number>
+  agreement_rate_request_info: number
+  top_v2_reasons_when_overridden: Array<{ reason: string; count: number }>
+}
+
+export interface CatalogSku {
+  prefix: string
+  product_name: string
+  category: string
+  warranty: string
 }
 
 // ---------------------------------------------------------------------------
@@ -234,4 +338,52 @@ export async function submitAgentDecision(
   })
   if (!res.ok) throw new Error(`Agent decision failed: ${res.status}`)
   return res.json()
+}
+
+export async function getCatalogSkus(): Promise<CatalogSku[]> {
+  const res = await fetch(`${API_BASE}/api/catalog/skus`)
+  if (!res.ok) throw new Error(`Catalog fetch failed: ${res.status}`)
+  return res.json()
+}
+
+export async function getAgentOverrides(): Promise<{ overrides: OverrideRow[] }> {
+  const res = await fetch(`${API_BASE}/api/agent/overrides`)
+  if (!res.ok) throw new Error(`Overrides fetch failed: ${res.status}`)
+  return res.json()
+}
+
+export async function getAgentOverrideStats(): Promise<OverrideStats> {
+  const res = await fetch(`${API_BASE}/api/agent/overrides/stats`)
+  if (!res.ok) throw new Error(`Override stats fetch failed: ${res.status}`)
+  return res.json()
+}
+
+// ---------------------------------------------------------------------------
+// v2 verdict reason humanization
+// ---------------------------------------------------------------------------
+
+export const VERDICT_REASON_COPY: Record<string, string> = {
+  capacity_code_structurally_invalid: "Batch code uses an invalid capacity prefix.",
+  capacity_code_anomaly_with_corroborating_tells: "Capacity-code anomaly combined with other counterfeit signals.",
+  multiple_counterfeit_tells_matched: "Multiple counterfeit tells matched the known-fakes catalog.",
+  multiple_critical_checks_failed: "Multiple critical validation checks failed.",
+  critical_check_failed: "A critical validation check failed.",
+  pop_product_mismatch: "Invoice product doesn't match the photos.",
+  pop_date_before_claim_impossible: "Invoice date is after the case-open date.",
+  fraud_ring_identical_batch_code_across_cases: "Same batch code is on another recent case — possible fraud ring.",
+  capacity_code_anomaly_needs_stamp_verification: "Capacity-code anomaly; cross-check with STAMP/Warranty Status Web.",
+  multiple_counterfeit_tells_matched_low_confidence: "Possible counterfeit (2 tells matched) — review.",
+  one_counterfeit_tell_matched: "Single counterfeit tell matched — low-signal review.",
+  damage_coverage_review: "Physical damage observed — damage-coverage policy review required.",
+  image_quality_insufficient: "One or more checks were inconclusive due to image quality.",
+  validation_check_failed: "A soft validation check failed.",
+  pop_missing: "No proof of purchase supplied.",
+  vendor_unauthorized: "Invoice is from an unauthorized reseller.",
+  no_product_images: "No product photos uploaded.",
+  fraud_ring_sequential_serials_across_cases: "Near-sequential serial numbers across cases — mass-counterfeit run signal.",
+  fraud_ring_correlation_detected: "Cross-case correlation detected; review related cases.",
+}
+
+export function humanizeVerdictReason(code: string): string {
+  return VERDICT_REASON_COPY[code] ?? code.replace(/_/g, " ")
 }
