@@ -363,6 +363,152 @@ function formatGapAction(action: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Invoice Extraction Card (rich layout for invoices)
+// ---------------------------------------------------------------------------
+
+function InvoiceExtractionCard({ classification, onImageClick, previewUrl }: { classification: Classification; onImageClick?: (url: string, classification: Classification) => void; previewUrl?: string }) {
+  const [rawOpen, setRawOpen] = useState(false)
+  const fields = classification.fields ?? []
+  const specs = classification.specifications ?? []
+
+  const invoiceNo = fields.find(f => f.label.toLowerCase().includes("invoice"))?.value
+  const invoiceDate = fields.find(f => f.label.toLowerCase().includes("date"))?.value
+  const seller = fields.find(f => f.label.toLowerCase().includes("sold") || f.label.toLowerCase().includes("seller"))?.value
+  const gstin = fields.find(f => f.label.toLowerCase().includes("gstin"))?.value
+  const buyer = fields.find(f => f.label.toLowerCase().includes("buyer") || f.label.toLowerCase().includes("bill"))?.value
+  const total = fields.find(f => f.label.toLowerCase().includes("total"))?.value
+  const channel = fields.find(f => f.label.toLowerCase().includes("channel"))?.value
+  const product = fields.find(f => f.label.toLowerCase().includes("product") || f.label.toLowerCase().includes("description"))?.value
+  const hsn = fields.find(f => f.label.toLowerCase().includes("hsn"))?.value
+
+  const keyFields = [invoiceNo, invoiceDate, seller, gstin, buyer, total, channel, product, hsn]
+  const otherFields = fields.filter(f => !keyFields.includes(f.value))
+
+  return (
+    <Card className="border border-border">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">Invoice Verified</span>
+          </div>
+          {channel && (
+            <Badge variant="outline" className="text-[10px] py-0.5 px-2">
+              {channel}
+            </Badge>
+          )}
+        </div>
+
+        <p className="text-sm text-muted-foreground">{classification.chat_message}</p>
+
+        <Separator />
+
+        <div className="grid grid-cols-2 gap-3">
+          {invoiceNo && (
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice No.</div>
+              <div className="text-xs font-medium text-foreground mt-0.5 font-mono">{invoiceNo}</div>
+            </div>
+          )}
+          {invoiceDate && (
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Date</div>
+              <div className="text-xs font-medium text-foreground mt-0.5">{invoiceDate}</div>
+            </div>
+          )}
+          {total && (
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Total</div>
+              <div className="text-xs font-semibold text-foreground mt-0.5">{total}</div>
+            </div>
+          )}
+          {hsn && (
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">HSN Code</div>
+              <div className="text-xs font-medium text-foreground mt-0.5 font-mono">{hsn}</div>
+            </div>
+          )}
+        </div>
+
+        {(seller || gstin) && (
+          <>
+            <Separator />
+            <div className="space-y-1">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Seller</div>
+              {seller && <div className="text-xs font-medium text-foreground">{seller}</div>}
+              {gstin && <div className="text-[11px] text-muted-foreground font-mono">GSTIN: {gstin}</div>}
+            </div>
+          </>
+        )}
+
+        {buyer && (
+          <>
+            <Separator />
+            <div className="space-y-1">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Buyer</div>
+              <div className="text-xs font-medium text-foreground">{buyer}</div>
+            </div>
+          </>
+        )}
+
+        {product && (
+          <>
+            <Separator />
+            <div className="space-y-1">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Product</div>
+              <div className="text-xs font-medium text-foreground">{product}</div>
+            </div>
+          </>
+        )}
+
+        {otherFields.length > 0 && (
+          <>
+            <Separator />
+            <div className="grid grid-cols-[100px_1fr] gap-y-1">
+              {otherFields.map((f, i) => (
+                <div key={i} className="contents">
+                  <span className="text-[11px] text-muted-foreground">{f.label}</span>
+                  <span className="text-[11px] font-medium text-foreground">{f.value}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {classification.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {classification.tags.map((tag, i) => (
+              <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 font-normal">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {classification.extracted_text.length > 0 && (
+          <>
+            <button
+              onClick={() => setRawOpen(!rawOpen)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              {rawOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              {rawOpen ? "Hide raw OCR text" : "Show raw OCR text"}
+            </button>
+            {rawOpen && (
+              <div className="text-xs text-muted-foreground space-y-0.5 font-mono bg-muted/50 rounded-md p-2 max-h-[120px] overflow-y-auto">
+                {classification.extracted_text.map((t, i) => (
+                  <div key={i}>{t}</div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Classification card (shown after upload)
 // ---------------------------------------------------------------------------
 
@@ -374,77 +520,9 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
   const specs = classification.specifications ?? []
   const SPEC_PREVIEW_COUNT = 4
 
-  // For invoices with fields, show image + fields side by side
-  if (isInvoice && classification.fields.length > 0 && previewUrl) {
-    return (
-      <Card className="border border-border">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-start gap-2">
-            <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
-            <p className="text-sm text-foreground leading-relaxed">{classification.chat_message}</p>
-          </div>
-
-          <Separator />
-
-          <div className="flex gap-3">
-            <div className="shrink-0">
-              <button
-                onClick={() => onImageClick?.(previewUrl, classification)}
-                className="cursor-pointer hover:opacity-80 transition-opacity"
-              >
-                <img
-                  src={previewUrl}
-                  alt="Invoice"
-                  className="w-[100px] h-[130px] object-cover rounded-md border border-border"
-                />
-              </button>
-            </div>
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Identifiers
-              </div>
-              <div className="grid grid-cols-[90px_1fr] gap-y-1 text-sm">
-                {classification.fields.map((f, i) => (
-                  <div key={i} className="contents">
-                    <span className="text-muted-foreground text-xs">{f.label}</span>
-                    <span className="font-medium text-foreground text-xs">{f.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {classification.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {classification.tags.map((tag, i) => (
-                <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 font-normal">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          )}
-
-          {classification.extracted_text.length > 0 && (
-            <>
-              <button
-                onClick={() => setRawOpen(!rawOpen)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-              >
-                {rawOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                {rawOpen ? "Hide raw text" : "Show raw text"}
-              </button>
-              {rawOpen && (
-                <div className="text-xs text-muted-foreground space-y-0.5 font-mono bg-muted/50 rounded-md p-2 max-h-[120px] overflow-y-auto">
-                  {classification.extracted_text.map((t, i) => (
-                    <div key={i}>{t}</div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-    )
+  // Use the dedicated invoice card for invoices with rich data
+  if (isInvoice && classification.fields.length > 0) {
+    return <InvoiceExtractionCard classification={classification} onImageClick={onImageClick} previewUrl={previewUrl} />
   }
 
   // Default layout for product/label/packaging images
