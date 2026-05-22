@@ -1021,6 +1021,13 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     userScrolledRef.current = scrollHeight - scrollTop - clientHeight > 60
   }
 
+  function scrollToBottom() {
+    if (scrollRef.current) {
+      userScrolledRef.current = false
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }
+
   useEffect(() => {
     if (scrollRef.current && !userScrolledRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -1138,11 +1145,13 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         addMsg("user", `[Uploaded: ${file.name}]`)
       }
     }
+    setTimeout(scrollToBottom, 50)
 
     // Bulk upload path: multiple product files
     if (fileList.length > 1 && kind === "product") {
       const ocrMarker = `__ocr_processing_${Date.now()}`
       setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={`${fileList.length} files`} />, timestamp: ocrMarker }])
+      setTimeout(scrollToBottom, 50)
 
       // Check demo bulk cache
       const demoBulk = getDemoBulkUploadResponse(fileList.map((f) => f.name), kind)
@@ -1207,6 +1216,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       if (demoResult) {
         const ocrMarker = `__ocr_processing_${Date.now()}`
         setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
+        setTimeout(scrollToBottom, 50)
         addLog("request", `POST /api/cases/${caseId}/images`, { kind: fileKind, filename: file.name, demo: true })
         await new Promise((r) => setTimeout(r, 800))
         addLog("response", `POST /api/cases/${caseId}/images`, demoResult)
@@ -1215,6 +1225,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         if (demoResult.classification) {
           addComponent("bot", <ClassificationCard classification={demoResult.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
         }
+        setTimeout(scrollToBottom, 100)
         const allFiles = [...uploadedFiles, ...newFiles]
         setUploadedFiles(allFiles)
         if (step === "check-invoice") {
@@ -1223,6 +1234,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         } else {
           applyNextStep(demoResult.next_step, demoResult.suggested_prompt, allFiles)
         }
+        setTimeout(scrollToBottom, 150)
         if (fileInputRef.current) fileInputRef.current.value = ""
         return
       }
@@ -1230,6 +1242,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       // Real single upload
       const ocrMarker = `__ocr_processing_${Date.now()}`
       setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
+      setTimeout(scrollToBottom, 50)
 
       try {
         addLog("request", `POST /api/cases/${caseId}/images`, { kind: fileKind, filename: file.name, mime_type: file.type, size: file.size })
@@ -1243,6 +1256,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         } else {
           addMsg("bot", `Received ${file.name} (${fileKind}).`)
         }
+        setTimeout(scrollToBottom, 100)
         const allFiles = [...uploadedFiles, ...newFiles]
         setUploadedFiles(allFiles)
         if (step === "check-invoice") {
