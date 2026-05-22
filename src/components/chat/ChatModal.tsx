@@ -409,7 +409,7 @@ function InvoiceExtractionCard({ classification, onImageClick, previewUrl }: { c
           )}
         </div>
 
-        <p className="text-sm text-muted-foreground">{classification.chat_message}</p>
+        <div className="text-sm text-muted-foreground"><MarkdownMessage content={classification.chat_message} /></div>
 
         <Separator />
 
@@ -541,7 +541,7 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start gap-2">
           <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
-          <p className="text-sm text-foreground leading-relaxed">{classification.chat_message}</p>
+          <div className="text-sm text-foreground leading-relaxed"><MarkdownMessage content={classification.chat_message} /></div>
         </div>
 
         {previewUrl && (
@@ -1247,19 +1247,10 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         } else if (result.next_step) {
           applyNextStep(result.next_step, result.suggested_prompt, allFiles)
         } else {
-          // Fallback: determine next step from classification type
+          // Fallback for older backends without next_step
           if (step === "upload-product") {
-            const cls = result.classification
-            const hasSerialOrLabel = cls?.type === "label_serial" ||
-              cls?.tags?.some(t => ["serial", "label", "back"].includes(t)) ||
-              cls?.fields?.some(f => f.label.toLowerCase().includes("serial"))
-            if (hasSerialOrLabel) {
-              addMsg("bot", "Thanks! Now please upload your **invoice or proof of purchase**.")
-              setStep("upload-invoice")
-            } else {
-              addMsg("bot", "Got it! Can you also upload a photo of the **back of the product** showing the label and serial number? This helps us verify authenticity.")
-              setStep("upload-product")
-            }
+            addMsg("bot", "Thanks! Now please upload your **invoice or proof of purchase**.")
+            setStep("upload-invoice")
           } else if (step === "upload-invoice") {
             handleRunValidation(allFiles)
           } else {
