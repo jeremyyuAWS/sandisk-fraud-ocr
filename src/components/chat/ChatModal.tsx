@@ -47,6 +47,7 @@ type ChatStep =
   | "issue-select"
   | "image-upload"
   | "upload-product"
+  | "upload-back"
   | "upload-invoice"
   | "upload-preview"
   | "validating"
@@ -541,7 +542,7 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start gap-2">
           <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
-          <div className="text-sm text-foreground leading-relaxed"><MarkdownMessage content={classification.chat_message} /></div>
+          <div className="text-sm text-foreground leading-relaxed"><MarkdownMessage content={classification.description || classification.chat_message} /></div>
         </div>
 
         {previewUrl && (
@@ -1108,7 +1109,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     }
     switch (nextStep) {
       case "upload_other_side":
-        setStep("upload-product")
+        setStep("upload-back")
         break
       case "upload_invoice":
         setStep("upload-invoice")
@@ -1266,7 +1267,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           applyNextStep(result.next_step, result.suggested_prompt, allFiles)
         } else {
           // Fallback for older backends without next_step
-          if (step === "upload-product") {
+          if (step === "upload-product" || step === "upload-back") {
             addMsg("bot", "Thanks! Now please upload your **invoice or proof of purchase**.")
             setStep("upload-invoice")
           } else if (step === "upload-invoice") {
@@ -1658,7 +1659,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           </div>
         )}
 
-        {step === "upload-product" && (
+        {(step === "upload-product" || step === "upload-back") && (
           <div className="space-y-2">
             <div className="flex gap-2">
               <Button
@@ -1668,7 +1669,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip className="h-3.5 w-3.5 mr-1.5" />
-                Upload Product Photo
+                {step === "upload-back" ? "Upload Back Photo" : "Upload Product Photo"}
               </Button>
             </div>
             <input
