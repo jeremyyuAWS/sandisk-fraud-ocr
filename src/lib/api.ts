@@ -322,10 +322,11 @@ export async function uploadImage(
   const form = new FormData()
   form.append("kind", kind)
   form.append("file", file)
+  const timeout = kind === "pop" ? 120000 : 60000
   const res = await fetch(`${API_BASE}/api/cases/${caseId}/images`, {
     method: "POST",
     body: form,
-    signal: AbortSignal.timeout(30000),
+    signal: AbortSignal.timeout(timeout),
   })
   if (!res.ok) throw new Error(`Upload image failed: ${res.status}`)
   return res.json()

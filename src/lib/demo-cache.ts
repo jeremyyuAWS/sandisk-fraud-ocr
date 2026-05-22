@@ -272,7 +272,8 @@ function normalizeFilename(name: string): string {
 function findDemoProduct(filename: string): DemoProduct | null {
   const normalized = normalizeFilename(filename)
   for (const [key, product] of Object.entries(DEMO_PRODUCTS)) {
-    if (normalized.includes(key)) return product
+    const normalizedKey = key.replace(/[_\-\s]+/g, " ").trim()
+    if (normalized.includes(normalizedKey)) return product
   }
   return null
 }
@@ -280,7 +281,8 @@ function findDemoProduct(filename: string): DemoProduct | null {
 function findDemoInvoice(filename: string): DemoInvoice | null {
   const normalized = normalizeFilename(filename)
   for (const [key, invoice] of Object.entries(DEMO_INVOICES)) {
-    if (normalized.includes(key)) return invoice
+    const normalizedKey = key.replace(/[_\-\s]+/g, " ").trim()
+    if (normalized.includes(normalizedKey)) return invoice
   }
   return null
 }
