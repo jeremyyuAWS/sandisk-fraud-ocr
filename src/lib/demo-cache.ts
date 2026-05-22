@@ -6,6 +6,7 @@ import type { UploadImageResponse, BulkUploadResponse, ValidateResponse, Classif
 interface DemoProduct {
   product: string
   sku: string
+  canAuthenticate: boolean
   classification: Classification
 }
 
@@ -22,6 +23,7 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
   "sdcz550-256g front": {
     product: "SanDisk Ultra Eco USB 3.2 Flash Drive 256GB",
     sku: "SDCZ550-256G",
+    canAuthenticate: false,
     classification: {
       type: "product_image",
       chat_message: "Product identified: **SanDisk Ultra Eco USB 3.2 Flash Drive 256GB** (SDCZ550-256G). Front view captured.",
@@ -43,6 +45,7 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
   "sdcz550-256g back": {
     product: "SanDisk Ultra Eco USB 3.2 Flash Drive 256GB",
     sku: "SDCZ550-256G",
+    canAuthenticate: true,
     classification: {
       type: "label_serial",
       chat_message: "Label captured: **SDCZ550-256G** — serial number and batch code visible.",
@@ -59,6 +62,7 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
   "sdsqua4-256g front": {
     product: "SanDisk Ultra microSDXC UHS-I 256GB",
     sku: "SDSQUA4-256G",
+    canAuthenticate: false,
     classification: {
       type: "product_image",
       chat_message: "Product identified: **SanDisk Ultra microSDXC UHS-I 256GB** (SDSQUA4-256G).",
@@ -79,6 +83,7 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
   "sdsqua4-256g back": {
     product: "SanDisk Ultra microSDXC UHS-I 256GB",
     sku: "SDSQUA4-256G",
+    canAuthenticate: true,
     classification: {
       type: "label_serial",
       chat_message: "Label captured: **SDSQUA4-256G** — serial and manufacturing info visible.",
@@ -95,6 +100,7 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
   "sdsquac-256g front": {
     product: "SanDisk Ultra microSDXC UHS-I 256GB",
     sku: "SDSQUAC-256G",
+    canAuthenticate: false,
     classification: {
       type: "product_image",
       chat_message: "Product identified: **SanDisk Ultra microSDXC UHS-I 256GB** (SDSQUAC-256G).",
@@ -115,6 +121,7 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
   "sdsquac-256g back": {
     product: "SanDisk Ultra microSDXC UHS-I 256GB",
     sku: "SDSQUAC-256G",
+    canAuthenticate: true,
     classification: {
       type: "label_serial",
       chat_message: "Label captured: **SDSQUAC-256G** — serial visible.",
@@ -131,6 +138,7 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
   "force_rx2846066 snap1": {
     product: "SanDisk Cruzer Force 32GB",
     sku: "SDCZ71-032G",
+    canAuthenticate: false,
     classification: {
       type: "product_image",
       chat_message: "Product identified: **SanDisk Cruzer Force 32GB** (SDCZ71-032G).",
@@ -150,9 +158,10 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
   "force_rx2846066 snap2": {
     product: "SanDisk Cruzer Force 32GB",
     sku: "SDCZ71-032G",
+    canAuthenticate: true,
     classification: {
-      type: "product_image",
-      chat_message: "Second angle captured for **SanDisk Cruzer Force 32GB**.",
+      type: "label_serial",
+      chat_message: "Label captured for **SanDisk Cruzer Force 32GB** — serial and batch code visible.",
       description: "SanDisk Cruzer Force - Second Angle",
       tags: ["usb", "cruzer_force", "32gb"],
       extracted_text: ["SanDisk", "32GB"],
@@ -287,11 +296,10 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
   const product = findDemoProduct(filename)
   if (product) {
     lastDemoProductSku = product.sku
-    const isFront = normalizeFilename(filename).includes("front") || normalizeFilename(filename).includes("snap1")
-    const nextStep: UploadNextStep = isFront ? "upload_other_side" : "upload_invoice"
-    const suggestedPrompt = nextStep === "upload_other_side"
-      ? `Got it — I can see the **${product.product}**. Can you also upload the back of the device showing the label/serial number?`
-      : `Matched against authentic reference for **${product.product}** (${product.sku}). Now please upload your Flipkart invoice or proof of purchase.`
+    const nextStep: UploadNextStep = product.canAuthenticate ? "upload_invoice" : "upload_other_side"
+    const suggestedPrompt = product.canAuthenticate
+      ? `Matched against authentic reference for **${product.product}** (${product.sku}). Now please upload your Flipkart invoice or proof of purchase.`
+      : `Got it — I can see the **${product.product}**. Can you also upload the back of the device showing the label/serial number?`
     return {
       image_id: `demo-img-${++demoImageCounter}`,
       kind: kind || "product",
@@ -304,13 +312,17 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
 
   const invoice = findDemoInvoice(filename)
   if (invoice) {
+    const matchesUploaded = lastDemoProductSku === invoice.matchesSku
+    const suggestedPrompt = matchesUploaded
+      ? `Invoice from **${invoice.vendorName}** received — product matches ${invoice.matchesSku}. Running verification now...`
+      : `Invoice from **${invoice.vendorName}** received, but the product on the invoice (${invoice.matchesSku}) does not match the uploaded product. Please upload the correct invoice.`
     return {
       image_id: `demo-img-${++demoImageCounter}`,
       kind: "pop",
       filename,
       classification: invoice.classification,
-      next_step: "validate",
-      suggested_prompt: `Invoice from **${invoice.vendorName}** received. Running verification now...`,
+      next_step: matchesUploaded ? "validate" : "upload_invoice",
+      suggested_prompt: suggestedPrompt,
     }
   }
 
@@ -325,7 +337,7 @@ export function getDemoBulkUploadResponse(filenames: string[], kind: string): Bu
     const product = findDemoProduct(filename)
     if (product) {
       lastDemoProductSku = product.sku
-      hasAuthenticMatch = true
+      if (product.canAuthenticate) hasAuthenticMatch = true
       uploads.push({
         image_id: `demo-img-${++demoImageCounter}`,
         kind: kind || "product",
@@ -339,14 +351,14 @@ export function getDemoBulkUploadResponse(filenames: string[], kind: string): Bu
 
   if (uploads.length === 0) return null
 
-  const product = findDemoProduct(filenames[0])
-  const productName = product?.product || "SanDisk Product"
-  const sku = product?.sku || ""
+  const firstProduct = findDemoProduct(filenames[0])
+  const productName = firstProduct?.product || "SanDisk Product"
+  const sku = firstProduct?.sku || ""
 
   const nextStep: UploadNextStep = hasAuthenticMatch ? "upload_invoice" : "upload_other_side"
   const suggestedPrompt = hasAuthenticMatch
     ? `Matched against authentic reference for **${productName}** (${sku}). Now please upload your Flipkart invoice or proof of purchase.`
-    : `Product images received. Can you upload the back of the device showing the label?`
+    : `Product images received. Can you also upload the back of the device showing the label/serial number?`
 
   return {
     uploads,
