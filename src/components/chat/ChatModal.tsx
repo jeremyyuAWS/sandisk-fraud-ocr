@@ -22,6 +22,7 @@ import {
   type Gap,
   type AuthenticReference,
 } from "@/lib/api"
+import { isDemoFile, getDemoUploadResponse, getDemoValidateResponse } from "@/lib/demo-cache"
 
 // ---------------------------------------------------------------------------
 // Session log entry type
@@ -43,6 +44,8 @@ type ChatStep =
   | "capture-details"
   | "issue-select"
   | "image-upload"
+  | "upload-product"
+  | "upload-invoice"
   | "upload-preview"
   | "validating"
   | "result"
@@ -1076,8 +1079,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       const case_id = result.case_id
       addLog("response", "POST /api/cases", result)
       setCaseId(case_id)
-      addMsg("bot", "I've opened a case for you. Please upload photos of your product. You can include:\n\n- **Product photo** (front/back)\n- **Label photo** (serial number, model)\n- **Packaging** (if available)\n- **Proof of purchase** (receipt/invoice, PDF accepted)\n\nUpload at least one product or label photo, then click **Run Verification**.")
-      setStep("image-upload")
+      addMsg("bot", "I've opened a case for you. Let's start by verifying your product.\n\nPlease upload a **photo of your product** (front or back showing the label/serial number).")
+      setStep("upload-product")
     } catch (err) {
       addLog("response", "POST /api/cases", { error: String(err) })
       addMsg("bot", "I'm sorry, there was an error creating your case. Please try again.")
@@ -1091,7 +1094,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     const newFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }> = []
 
     for (const file of Array.from(files)) {
-      const kind = inferImageKind(file.name)
+      const kind = (step === "upload-invoice" || step === "check-invoice") ? "pop" : inferImageKind(file.name)
       const isImage = file.type.startsWith("image/")
       const previewUrl = isImage ? URL.createObjectURL(file) : undefined
 
@@ -1103,6 +1106,22 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         ))
       } else {
         addMsg("user", `[Uploaded: ${file.name}]`)
+      }
+
+      // Check for pre-cached demo response
+      const demoResult = getDemoUploadResponse(file.name, kind)
+      if (demoResult) {
+        const ocrMarker = `__ocr_processing_${Date.now()}`
+        setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
+        addLog("request", `POST /api/cases/${caseId}/images`, { kind, filename: file.name, demo: true })
+        await new Promise((r) => setTimeout(r, 800))
+        addLog("response", `POST /api/cases/${caseId}/images`, demoResult)
+        newFiles.push({ file, kind, imageId: demoResult.image_id, previewUrl })
+        setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
+        if (demoResult.classification) {
+          addComponent("bot", <ClassificationCard classification={demoResult.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+        }
+        continue
       }
 
       // Show OCR processing indicator with file-specific steps
@@ -1129,8 +1148,15 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       }
     }
 
-    setUploadedFiles((prev) => [...prev, ...newFiles])
-    if (step === "check-invoice") {
+    const allFiles = [...uploadedFiles, ...newFiles]
+    setUploadedFiles(allFiles)
+    if (step === "upload-product") {
+      addMsg("bot", "Thanks! Now please upload your **invoice or proof of purchase** (receipt, PDF, or photo of invoice).")
+      setStep("upload-invoice")
+    } else if (step === "upload-invoice") {
+      addMsg("bot", "Invoice received. Running verification now...")
+      handleRunValidation(allFiles)
+    } else if (step === "check-invoice") {
       addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
       handleWarrantyCheck()
     } else {
@@ -1147,12 +1173,41 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     return "product"
   }
 
-  async function handleRunValidation() {
+  async function handleRunValidation(filesOverride?: Array<{ file: File; kind: string }>) {
     if (!caseId) return
 
     setStep("validating")
     const spinnerIdx = messages.length
     addComponent("bot", <ValidatingSpinner />)
+
+    // Check for demo cache hit
+    const demoValidation = getDemoValidateResponse(caseId, filesOverride || uploadedFiles)
+    if (demoValidation) {
+      addLog("request", `POST /api/cases/${caseId}/validate`, { case_id: caseId, demo: true })
+      await new Promise((r) => setTimeout(r, 600))
+      addLog("response", `POST /api/cases/${caseId}/validate`, demoValidation)
+      const result = demoValidation
+      setValidationResult(result)
+      setMessages((prev) => {
+        const without = prev.filter((_, i) => i !== spinnerIdx)
+        return [...without, { from: "bot" as const, component: <ValidationResultCard summary={result.customer_summary} onGapAction={handleGapAction} />, timestamp: now() }]
+      })
+      const v2 = result.customer_summary.v2
+      if (v2?.authentic_reference?.matched) {
+        addComponent("bot", <AuthenticBadge reference={v2.authentic_reference} />)
+        if (v2.pop_validation?.vendor_authorized && v2.pop_validation?.product_match) {
+          addMsg("bot", "Your product is verified authentic and your invoice is confirmed. You're eligible for a warranty replacement.\n\nWould you like to proceed with a return?")
+          setStep("issue-resolved-ask")
+        } else {
+          addMsg("bot", "Your product is verified authentic. Let's move on to troubleshooting.\n\nCan you describe the issue you're experiencing?")
+          setStep("troubleshoot")
+        }
+      } else {
+        addMsg("bot", "Your product passed authentication. Can you describe what's happening with your product?")
+        setStep("troubleshoot")
+      }
+      return
+    }
 
     try {
       addLog("request", `POST /api/cases/${caseId}/validate`, { case_id: caseId })
@@ -1280,8 +1335,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         general: "Got it, let me help you with that.",
       }
       const greeting = friendlyIntents[intent] || `Got it, I can help with your **${intent.replace(/_/g, " ")}** issue.`
-      addMsg("bot", `${greeting}\n\nPlease upload photos of your product for verification:\n\n- **Product photo** (front/back)\n- **Label photo** (serial number, model)\n- **Proof of purchase** (receipt/invoice)\n\nUpload at least one photo, then click **Run Verification**.`)
-      setStep("image-upload")
+      addMsg("bot", `${greeting}\n\nLet's start by verifying your product. Please upload a **photo of your product** (front or back showing the label/serial number).`)
+      setStep("upload-product")
     } catch (err) {
       addLog("response", "POST /api/cases", { error: String(err) })
       addMsg("bot", "Sorry, there was an error creating your case. Please try again.")
@@ -1481,6 +1536,54 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
               <QuickChip label="Replacement Status" onClick={() => handleIssueSelect("replacement_status")} />
               <QuickChip label="Troubleshooting" onClick={() => handleIssueSelect("troubleshooting")} />
             </div>
+          </div>
+        )}
+
+        {step === "upload-product" && (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+                Upload Product Photo
+              </Button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png"
+              multiple
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+          </div>
+        )}
+
+        {step === "upload-invoice" && (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+                Upload Invoice / Receipt
+              </Button>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,application/pdf"
+              multiple
+              className="hidden"
+              onChange={handleFileUpload}
+            />
           </div>
         )}
 
