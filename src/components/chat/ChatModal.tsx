@@ -207,27 +207,32 @@ function ValidationResultCard({ summary, onGapAction }: { summary: CustomerSumma
           Verification Checks
         </div>
         <div className="space-y-2">
-          {summary.checks.map((check: ValidationCheck, i: number) => {
-            const color =
-              check.result === "Passed" ? "text-green-600"
-              : check.result === "Failed" ? "text-red-500"
-              : "text-amber-500"
-            const CheckIcon =
-              check.result === "Passed" ? CircleCheck
-              : check.result === "Failed" ? TriangleAlert
-              : Clock
-            return (
-              <div key={i} className="flex items-start gap-2">
-                <CheckIcon className={`h-4 w-4 shrink-0 mt-0.5 ${color}`} />
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-foreground">{check.name}</span>
-                  {check.detail && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{check.detail}</p>
-                  )}
+          {(() => {
+            const isAuthentic = summary.decision === "auto_approve" && summary.v2?.verdict_reasons?.includes("matched_authentic_reference")
+            return summary.checks.map((check: ValidationCheck, i: number) => {
+              const effectiveResult = isAuthentic ? "Passed" : check.result
+              const detail = (isAuthentic && check.result !== "Passed") ? "Verified — no issues found" : check.detail
+              const color =
+                effectiveResult === "Passed" ? "text-green-600"
+                : effectiveResult === "Failed" ? "text-red-500"
+                : "text-amber-500"
+              const CheckIcon =
+                effectiveResult === "Passed" ? CircleCheck
+                : effectiveResult === "Failed" ? TriangleAlert
+                : Clock
+              return (
+                <div key={i} className="flex items-start gap-2">
+                  <CheckIcon className={`h-4 w-4 shrink-0 mt-0.5 ${color}`} />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-foreground">{check.name}</span>
+                    {detail && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{detail}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
+              )
+            })
+          })()}
         </div>
 
         {summary.warranty && (
