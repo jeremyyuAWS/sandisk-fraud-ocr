@@ -15,8 +15,20 @@ export interface HealthResponse {
   build?: string
 }
 
+export type IssueType = "warranty" | "authentication" | "replacement_status" | "troubleshooting" | "general"
+
 export interface CreateCaseResponse {
   case_id: string
+  issue_type: IssueType | null
+  classified_intent: IssueType | null
+}
+
+export interface ChatMessageResponse {
+  message_id: string
+  case_id: string
+  role: "customer" | "assistant" | "system"
+  text: string
+  intent: IssueType | null
 }
 
 export interface ClassificationField {
@@ -98,6 +110,12 @@ export interface RefinementMeta {
   fields_added: string[]
 }
 
+export interface AuthenticReference {
+  matched: boolean
+  product: string
+  sku: string
+}
+
 export interface V2Verdict {
   verdict_reasons: string[]
   damage_observed: boolean
@@ -112,6 +130,7 @@ export interface V2Verdict {
   gaps: Gap[]
   reason: string
   recommended_next_action: string
+  authentic_reference?: AuthenticReference | null
 }
 
 // ---------------------------------------------------------------------------
@@ -255,17 +274,33 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export async function createCase(
-  issueType: "warranty" | "authentication" | "replacement_status" | "troubleshooting",
-  customerId?: string
+  issueType?: "warranty" | "authentication" | "replacement_status" | "troubleshooting",
+  options?: { customerId?: string; customerMessage?: string }
 ): Promise<CreateCaseResponse> {
-  const body: Record<string, string> = { issue_type: issueType }
-  if (customerId) body.customer_id = customerId
+  const body: Record<string, string> = {}
+  if (issueType) body.issue_type = issueType
+  if (options?.customerId) body.customer_id = options.customerId
+  if (options?.customerMessage) body.customer_message = options.customerMessage
   const res = await fetch(`${API_BASE}/api/cases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`Create case failed: ${res.status}`)
+  return res.json()
+}
+
+export async function sendMessage(
+  caseId: string,
+  text: string,
+  role: "customer" | "assistant" | "system" = "customer"
+): Promise<ChatMessageResponse> {
+  const res = await fetch(`${API_BASE}/api/cases/${caseId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, role }),
+  })
+  if (!res.ok) throw new Error(`Send message failed: ${res.status}`)
   return res.json()
 }
 
@@ -385,6 +420,8 @@ export const VERDICT_REASON_COPY: Record<string, string> = {
   no_product_images: "No product photos uploaded.",
   fraud_ring_sequential_serials_across_cases: "Near-sequential serial numbers across cases — mass-counterfeit run signal.",
   fraud_ring_correlation_detected: "Cross-case correlation detected; review related cases.",
+  matched_authentic_reference: "Verified against a known-authentic SanDisk product — confirmed genuine.",
+  capacity_code_mismatch: "The capacity code on the product doesn't match its labeled capacity — counterfeit.",
 }
 
 export function humanizeVerdictReason(code: string): string {

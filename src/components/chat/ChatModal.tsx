@@ -11,6 +11,7 @@ import {
   uploadImage,
   validateCase,
   escalateCase,
+  sendMessage,
   getHealth,
   humanizeVerdictReason,
   type ValidateResponse,
@@ -19,6 +20,7 @@ import {
   type Classification,
   type V2Verdict,
   type Gap,
+  type AuthenticReference,
 } from "@/lib/api"
 
 // ---------------------------------------------------------------------------
@@ -38,12 +40,21 @@ interface LogEntry {
 
 type ChatStep =
   | "welcome"
+  | "capture-details"
   | "issue-select"
   | "image-upload"
   | "upload-preview"
   | "validating"
   | "result"
+  | "troubleshoot"
+  | "issue-resolved-ask"
+  | "educate-replacement"
+  | "check-invoice"
+  | "warranty-decision"
+  | "process-rma"
+  | "warranty-void"
   | "escalated"
+  | "closed"
 
 interface ChatMessage {
   from: "bot" | "user"
@@ -870,6 +881,22 @@ function ImageLightbox({ url, classification, onClose }: { url: string; classifi
 }
 
 // ---------------------------------------------------------------------------
+// Authentic Reference Badge
+// ---------------------------------------------------------------------------
+
+function AuthenticBadge({ reference }: { reference: AuthenticReference }) {
+  return (
+    <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 flex items-center gap-3">
+      <ShieldCheck className="h-5 w-5 text-green-600 shrink-0" />
+      <div>
+        <div className="text-sm font-semibold text-green-800">Verified Authentic</div>
+        <div className="text-xs text-green-700">{reference.product} ({reference.sku})</div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main ChatModal
 // ---------------------------------------------------------------------------
 
@@ -886,6 +913,10 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [connectionStatus, setConnectionStatus] = useState<"online" | "offline" | "error">("online")
   const [lastError, setLastError] = useState<string | null>(null)
   const [textInput, setTextInput] = useState("")
+  const [customerName, setCustomerName] = useState("")
+  const [customerEmail, setCustomerEmail] = useState("")
+  const [customerContact, setCustomerContact] = useState("")
+  const [detailsStep, setDetailsStep] = useState<"name" | "email" | "contact" | "done">("name")
   const scrollRef = useRef<HTMLDivElement>(null)
   const logsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -934,9 +965,10 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([
-        { from: "bot", text: "Hello! Welcome to SanDisk Support. How can I help you today?", timestamp: now() },
+        { from: "bot", text: "Hello! Welcome to SanDisk Support. To get started, may I have your **name**?", timestamp: now() },
       ])
-      setStep("issue-select")
+      setStep("capture-details")
+      setDetailsStep("name")
     }
   }, [open])
 
@@ -963,8 +995,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
 
     try {
       addLog("request", "POST /api/cases", { issue_type: issueType })
-      const { case_id } = await createCase(issueType)
-      addLog("response", "POST /api/cases", { case_id })
+      const result = await createCase(issueType, { customerId: customerEmail || undefined })
+      const case_id = result.case_id
+      addLog("response", "POST /api/cases", result)
       setCaseId(case_id)
       addMsg("bot", "I've opened a case for you. Please upload photos of your product. You can include:\n\n- **Product photo** (front/back)\n- **Label photo** (serial number, model)\n- **Packaging** (if available)\n- **Proof of purchase** (receipt/invoice, PDF accepted)\n\nUpload at least one product or label photo, then click **Run Verification**.")
       setStep("image-upload")
@@ -1020,7 +1053,12 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     }
 
     setUploadedFiles((prev) => [...prev, ...newFiles])
-    setStep("upload-preview")
+    if (step === "check-invoice") {
+      addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
+      handleWarrantyCheck()
+    } else {
+      setStep("upload-preview")
+    }
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
@@ -1048,7 +1086,27 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         const without = prev.filter((_, i) => i !== spinnerIdx)
         return [...without, { from: "bot" as const, component: <ValidationResultCard summary={result.customer_summary} onGapAction={handleGapAction} />, timestamp: now() }]
       })
-      setStep("result")
+
+      // Follow the call-flow: after "Verify Product Authenticity"
+      const v2 = result.customer_summary.v2
+      const isAuthentic = result.customer_summary.decision === "auto_approve"
+      const isCounterfeit = result.customer_summary.decision === "auto_reject"
+
+      if (v2?.authentic_reference?.matched) {
+        // Fast path: verified authentic
+        addComponent("bot", <AuthenticBadge reference={v2.authentic_reference} />)
+        addMsg("bot", "Your product is verified authentic. Let's move on to troubleshooting.\n\nCan you describe the issue you're experiencing?")
+        setStep("troubleshoot")
+      } else if (isAuthentic) {
+        addMsg("bot", "Your product passed authentication. Let's troubleshoot your issue.\n\nCan you describe what's happening with your product?")
+        setStep("troubleshoot")
+      } else if (isCounterfeit) {
+        addMsg("bot", "Based on our analysis, this product did not pass our authenticity checks. Unfortunately, we cannot process a warranty claim for this item.\n\nWould you like to speak to an agent for further assistance?")
+        setStep("warranty-void")
+      } else {
+        // human_review — show result and offer next steps
+        setStep("result")
+      }
     } catch (err) {
       addLog("response", `POST /api/cases/${caseId}/validate`, { error: String(err) })
       setMessages((prev) => prev.filter((_, i) => i !== spinnerIdx))
@@ -1083,13 +1141,95 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     if (!text) return
     addMsg("user", text)
     setTextInput("")
-    if (step === "issue-select") {
+
+    if (step === "capture-details") {
+      handleDetailsCapture(text)
+    } else if (step === "issue-select") {
       const lower = text.toLowerCase()
       if (lower.includes("warrant")) handleIssueSelect("warranty")
       else if (lower.includes("authent") || lower.includes("fake") || lower.includes("genuine")) handleIssueSelect("authentication")
       else if (lower.includes("replac") || lower.includes("status")) handleIssueSelect("replacement_status")
-      else if (lower.includes("troubleshoot") || lower.includes("not working") || lower.includes("issue")) handleIssueSelect("troubleshooting")
-      else handleIssueSelect("warranty")
+      else if (lower.includes("troubleshoot") || lower.includes("not working") || lower.includes("issue") || lower.includes("broken")) handleIssueSelect("troubleshooting")
+      else {
+        handleCreateCaseWithMessage(text)
+      }
+    } else if (step === "issue-resolved-ask") {
+      const lower = text.toLowerCase()
+      if (lower.includes("yes") || lower.includes("resolved") || lower.includes("fixed") || lower.includes("work")) {
+        handleIssueResolved()
+      } else {
+        handleIssueNotResolved()
+      }
+    } else if (step === "troubleshoot") {
+      if (caseId) sendMessage(caseId, text, "customer").catch(() => {})
+    } else if (caseId) {
+      sendMessage(caseId, text, "customer").catch(() => {})
+    }
+  }
+
+  function handleDetailsCapture(text: string) {
+    if (detailsStep === "name") {
+      setCustomerName(text)
+      setDetailsStep("email")
+      addMsg("bot", `Thanks, **${text}**! What's your email address?`)
+    } else if (detailsStep === "email") {
+      setCustomerEmail(text)
+      setDetailsStep("contact")
+      addMsg("bot", "And a contact number? (or type 'skip' to proceed)")
+    } else if (detailsStep === "contact") {
+      if (text.toLowerCase() !== "skip") setCustomerContact(text)
+      setDetailsStep("done")
+      addMsg("bot", "Great, I have your details. How can I help you today?\n\nYou can select a category below or just describe your issue.")
+      setStep("issue-select")
+    }
+  }
+
+  async function handleCreateCaseWithMessage(text: string) {
+    try {
+      addLog("request", "POST /api/cases", { customer_message: text })
+      const result = await createCase(undefined, { customerMessage: text, customerId: customerEmail || undefined })
+      addLog("response", "POST /api/cases", result)
+      setCaseId(result.case_id)
+      const intent = result.classified_intent || result.issue_type || "general"
+      addMsg("bot", `Got it — that sounds like a **${intent.replace("_", " ")}** issue. Let me help you with that.\n\nPlease upload photos of your product for verification:\n\n- **Product photo** (front/back)\n- **Label photo** (serial number, model)\n- **Proof of purchase** (receipt/invoice)\n\nUpload at least one photo, then click **Run Verification**.`)
+      setStep("image-upload")
+    } catch (err) {
+      addLog("response", "POST /api/cases", { error: String(err) })
+      addMsg("bot", "Sorry, there was an error creating your case. Please try again.")
+    }
+  }
+
+  function handleIssueResolved() {
+    addMsg("bot", "That's great to hear! Here are some helpful tips to keep your SanDisk product in top shape:\n\n- Always safely eject before removing\n- Avoid extreme temperatures\n- Keep away from moisture and magnets\n\nIs there anything else I can help you with?")
+    setStep("closed")
+  }
+
+  function handleIssueNotResolved() {
+    const hasPop = uploadedFiles.some(f => f.kind === "pop")
+    if (hasPop) {
+      addMsg("bot", "I understand the issue isn't resolved. Based on your product verification, let me check your warranty eligibility.\n\nReviewing your invoice and warranty details...")
+      handleWarrantyCheck()
+    } else {
+      addMsg("bot", "I understand the issue isn't resolved. To proceed with a replacement, I'll need to verify your warranty eligibility.\n\nPlease upload your **proof of purchase** (receipt or invoice) so I can check coverage.")
+      setStep("check-invoice")
+    }
+  }
+
+  function handleWarrantyCheck() {
+    const summary = validationResult?.customer_summary
+    const v2 = summary?.v2
+    const popValid = v2?.pop_validation
+    const warrantyText = summary?.warranty
+
+    if (summary?.decision === "auto_approve" || (popValid?.product_match && popValid?.date_plausible)) {
+      addMsg("bot", `Your product is eligible for warranty replacement.\n\n${warrantyText ? `**Coverage:** ${warrantyText}` : ""}\n\nI'm initiating the RMA process for you. A replacement request has been created, and you'll receive an email at **${customerEmail || "your registered email"}** with shipping instructions.`)
+      setStep("process-rma")
+    } else if (summary?.decision === "auto_reject") {
+      addMsg("bot", "Unfortunately, based on our verification, this product is **not eligible** for warranty coverage.\n\nReasons:\n" + (v2?.verdict_reasons.map(r => `- ${humanizeVerdictReason(r)}`).join("\n") || "- Verification checks did not pass") + "\n\nYou may purchase a replacement from an authorized SanDisk retailer. Would you like to speak to an agent for further assistance?")
+      setStep("warranty-void")
+    } else {
+      addMsg("bot", "Your case requires further review to determine warranty eligibility. I'm escalating this to a specialist who will review your documentation and get back to you.\n\nIs there anything else I can help with?")
+      handleEscalate()
     }
   }
 
@@ -1114,9 +1254,14 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     setValidationResult(null)
     setLogs([])
     setActiveTab("chat")
+    setCustomerName("")
+    setCustomerEmail("")
+    setCustomerContact("")
+    setDetailsStep("name")
     setTimeout(() => {
-      setMessages([{ from: "bot", text: "Hello! Welcome to SanDisk Support. How can I help you today?", timestamp: now() }])
-      setStep("issue-select")
+      setMessages([{ from: "bot", text: "Hello! Welcome to SanDisk Support. To get started, may I have your **name**?", timestamp: now() }])
+      setStep("capture-details")
+      setDetailsStep("name")
     }, 100)
   }
 
@@ -1240,11 +1385,13 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       {/* Bottom action area (chat tab only) */}
       <div className={`px-4 py-3 border-t border-border shrink-0 space-y-2 ${activeTab !== "chat" ? "hidden" : ""}`}>
         {step === "issue-select" && (
-          <div className="flex flex-wrap gap-2">
-            <QuickChip label="Warranty Verification" onClick={() => handleIssueSelect("warranty")} />
-            <QuickChip label="Product Authentication" onClick={() => handleIssueSelect("authentication")} />
-            <QuickChip label="Replacement Status" onClick={() => handleIssueSelect("replacement_status")} />
-            <QuickChip label="Troubleshooting" onClick={() => handleIssueSelect("troubleshooting")} />
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <QuickChip label="Warranty Verification" onClick={() => handleIssueSelect("warranty")} />
+              <QuickChip label="Product Authentication" onClick={() => handleIssueSelect("authentication")} />
+              <QuickChip label="Replacement Status" onClick={() => handleIssueSelect("replacement_status")} />
+              <QuickChip label="Troubleshooting" onClick={() => handleIssueSelect("troubleshooting")} />
+            </div>
           </div>
         )}
 
@@ -1312,13 +1459,73 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           </div>
         )}
 
-        {step === "escalated" && (
-          <div className="text-center text-xs text-muted-foreground py-2">
-            Case escalated to specialist. You can close this chat.
+        {step === "troubleshoot" && (
+          <div className="flex flex-wrap gap-2">
+            <QuickChip label="Issue is resolved" onClick={handleIssueResolved} />
+            <QuickChip label="Still not working" onClick={handleIssueNotResolved} />
           </div>
         )}
 
-        {step !== "validating" && step !== "escalated" && (
+        {step === "issue-resolved-ask" && (
+          <div className="flex flex-wrap gap-2">
+            <QuickChip label="Yes, resolved" onClick={handleIssueResolved} />
+            <QuickChip label="No, need replacement" onClick={handleIssueNotResolved} />
+          </div>
+        )}
+
+        {step === "check-invoice" && (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip className="h-3.5 w-3.5 mr-1.5" />
+              Upload Invoice / Receipt
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,application/pdf"
+              multiple
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+          </div>
+        )}
+
+        {step === "warranty-void" && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={handleEscalate}>
+              Speak to Agent
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleReset}>
+              New Case
+            </Button>
+          </div>
+        )}
+
+        {step === "process-rma" && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={handleReset}>
+              Done
+            </Button>
+          </div>
+        )}
+
+        {(step === "escalated" || step === "closed") && (
+          <div className="flex gap-2 items-center">
+            <span className="text-xs text-muted-foreground flex-1">
+              {step === "escalated" ? "Case escalated to specialist." : "Session complete."}
+            </span>
+            <Button variant="outline" size="sm" onClick={handleReset}>
+              New Case
+            </Button>
+          </div>
+        )}
+
+        {step !== "validating" && step !== "escalated" && step !== "closed" && step !== "process-rma" && (
           <div className="flex items-center gap-2 pt-1">
             <input
               type="text"
