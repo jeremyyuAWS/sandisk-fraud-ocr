@@ -1108,6 +1108,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       case "validate":
         handleRunValidation(allFiles)
         break
+      case "complete":
+        setStep("upload-preview")
+        break
       default:
         setStep("upload-preview")
         break
