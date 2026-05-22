@@ -1225,6 +1225,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       const lower = text.toLowerCase()
       if (lower.includes("warrant")) handleIssueSelect("warranty")
       else if (lower.includes("authent") || lower.includes("fake") || lower.includes("genuine")) handleIssueSelect("authentication")
+      else if (lower.includes("return") || lower.includes("rma") || lower.includes("refund") || lower.includes("exchange")) handleIssueSelect("warranty")
       else if (lower.includes("replac") || lower.includes("status")) handleIssueSelect("replacement_status")
       else if (lower.includes("troubleshoot") || lower.includes("not working") || lower.includes("issue") || lower.includes("broken")) handleIssueSelect("troubleshooting")
       else {
@@ -1269,7 +1270,17 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       addLog("response", "POST /api/cases", result)
       setCaseId(result.case_id)
       const intent = result.classified_intent || result.issue_type || "general"
-      addMsg("bot", `Got it — that sounds like a **${intent.replace("_", " ")}** issue. Let me help you with that.\n\nPlease upload photos of your product for verification:\n\n- **Product photo** (front/back)\n- **Label photo** (serial number, model)\n- **Proof of purchase** (receipt/invoice)\n\nUpload at least one photo, then click **Run Verification**.`)
+      const friendlyIntents: Record<string, string> = {
+        warranty: "Got it, I can help with your warranty claim.",
+        replacement: "Got it, I can help with your return.",
+        return: "Got it, I can help with your return.",
+        rma: "Got it, I can help with your return.",
+        authentication: "Got it, I can help verify your product.",
+        troubleshooting: "Got it, let me help you troubleshoot.",
+        general: "Got it, let me help you with that.",
+      }
+      const greeting = friendlyIntents[intent] || `Got it, I can help with your **${intent.replace(/_/g, " ")}** issue.`
+      addMsg("bot", `${greeting}\n\nPlease upload photos of your product for verification:\n\n- **Product photo** (front/back)\n- **Label photo** (serial number, model)\n- **Proof of purchase** (receipt/invoice)\n\nUpload at least one photo, then click **Run Verification**.`)
       setStep("image-upload")
     } catch (err) {
       addLog("response", "POST /api/cases", { error: String(err) })
