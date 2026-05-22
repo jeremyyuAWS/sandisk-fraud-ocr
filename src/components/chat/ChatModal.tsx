@@ -9,11 +9,13 @@ import { MarkdownMessage } from "./MarkdownMessage"
 import {
   createCase,
   uploadImage,
+  uploadImagesBulk,
   validateCase,
   escalateCase,
   sendMessage,
   getHealth,
   humanizeVerdictReason,
+  type UploadNextStep,
   type ValidateResponse,
   type CustomerSummary,
   type ValidationCheck,
@@ -22,7 +24,7 @@ import {
   type Gap,
   type AuthenticReference,
 } from "@/lib/api"
-import { isDemoFile, getDemoUploadResponse, getDemoValidateResponse } from "@/lib/demo-cache"
+import { getDemoUploadResponse, getDemoBulkUploadResponse, getDemoValidateResponse } from "@/lib/demo-cache"
 
 // ---------------------------------------------------------------------------
 // Session log entry type
@@ -1087,80 +1089,174 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     }
   }
 
+  function applyNextStep(nextStep: UploadNextStep | undefined, suggestedPrompt: string | undefined, allFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>) {
+    if (suggestedPrompt) {
+      addMsg("bot", suggestedPrompt)
+    }
+    switch (nextStep) {
+      case "upload_other_side":
+        setStep("upload-product")
+        break
+      case "upload_invoice":
+        setStep("upload-invoice")
+        break
+      case "validate":
+        handleRunValidation(allFiles)
+        break
+      default:
+        setStep("upload-preview")
+        break
+    }
+  }
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || !caseId) return
 
+    const fileList = Array.from(files)
+    const kind = (step === "upload-invoice" || step === "check-invoice") ? "pop" : "product"
     const newFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }> = []
 
-    for (const file of Array.from(files)) {
-      const kind = (step === "upload-invoice" || step === "check-invoice") ? "pop" : inferImageKind(file.name)
+    // Show previews for all files
+    for (const file of fileList) {
       const isImage = file.type.startsWith("image/")
       const previewUrl = isImage ? URL.createObjectURL(file) : undefined
-
-      // Show image preview in chat (clickable to open lightbox)
       if (isImage && previewUrl) {
-        const capturedUrl = previewUrl
         addComponent("user", (
-          <ClickableImagePreview url={capturedUrl} filename={file.name} onClick={(url) => setLightbox({ url })} />
+          <ClickableImagePreview url={previewUrl} filename={file.name} onClick={(url) => setLightbox({ url })} />
         ))
       } else {
         addMsg("user", `[Uploaded: ${file.name}]`)
       }
+    }
 
-      // Check for pre-cached demo response
-      const demoResult = getDemoUploadResponse(file.name, kind)
+    // Bulk upload path: multiple product files
+    if (fileList.length > 1 && kind === "product") {
+      const ocrMarker = `__ocr_processing_${Date.now()}`
+      setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={`${fileList.length} files`} />, timestamp: ocrMarker }])
+
+      // Check demo bulk cache
+      const demoBulk = getDemoBulkUploadResponse(fileList.map((f) => f.name), kind)
+      if (demoBulk) {
+        addLog("request", `POST /api/cases/${caseId}/images/bulk`, { kind, files: fileList.map((f) => f.name), demo: true })
+        await new Promise((r) => setTimeout(r, 800))
+        addLog("response", `POST /api/cases/${caseId}/images/bulk`, demoBulk)
+        setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
+        for (let i = 0; i < demoBulk.uploads.length; i++) {
+          const upload = demoBulk.uploads[i]
+          const file = fileList[i]
+          const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
+          newFiles.push({ file, kind, imageId: upload.image_id, previewUrl })
+          if (upload.classification) {
+            addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+          }
+        }
+        const allFiles = [...uploadedFiles, ...newFiles]
+        setUploadedFiles(allFiles)
+        applyNextStep(demoBulk.next_step, demoBulk.suggested_prompt, allFiles)
+        if (fileInputRef.current) fileInputRef.current.value = ""
+        return
+      }
+
+      // Real bulk upload
+      try {
+        addLog("request", `POST /api/cases/${caseId}/images/bulk`, { kind, files: fileList.map((f) => f.name) })
+        const minDelay = new Promise((r) => setTimeout(r, 10000 + Math.random() * 26000))
+        const [result] = await Promise.all([uploadImagesBulk(caseId, kind, fileList), minDelay])
+        addLog("response", `POST /api/cases/${caseId}/images/bulk`, result)
+        setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
+        for (let i = 0; i < result.uploads.length; i++) {
+          const upload = result.uploads[i]
+          const file = fileList[i]
+          const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
+          newFiles.push({ file, kind, imageId: upload.image_id, previewUrl })
+          if (upload.classification?.chat_message) {
+            addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+          }
+        }
+        const allFiles = [...uploadedFiles, ...newFiles]
+        setUploadedFiles(allFiles)
+        applyNextStep(result.next_step, result.suggested_prompt, allFiles)
+      } catch (err) {
+        addLog("response", `POST /api/cases/${caseId}/images/bulk`, { error: String(err) })
+        setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
+        addMsg("bot", "Failed to upload files. Please try again.")
+        setStep("upload-product")
+      }
+      if (fileInputRef.current) fileInputRef.current.value = ""
+      return
+    }
+
+    // Single file upload path
+    for (const file of fileList) {
+      const fileKind = (step === "upload-invoice" || step === "check-invoice") ? "pop" : inferImageKind(file.name)
+      const isImage = file.type.startsWith("image/")
+      const previewUrl = isImage ? URL.createObjectURL(file) : undefined
+
+      // Check demo cache
+      const demoResult = getDemoUploadResponse(file.name, fileKind)
       if (demoResult) {
         const ocrMarker = `__ocr_processing_${Date.now()}`
         setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
-        addLog("request", `POST /api/cases/${caseId}/images`, { kind, filename: file.name, demo: true })
+        addLog("request", `POST /api/cases/${caseId}/images`, { kind: fileKind, filename: file.name, demo: true })
         await new Promise((r) => setTimeout(r, 800))
         addLog("response", `POST /api/cases/${caseId}/images`, demoResult)
-        newFiles.push({ file, kind, imageId: demoResult.image_id, previewUrl })
+        newFiles.push({ file, kind: fileKind, imageId: demoResult.image_id, previewUrl })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (demoResult.classification) {
           addComponent("bot", <ClassificationCard classification={demoResult.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
         }
-        continue
+        const allFiles = [...uploadedFiles, ...newFiles]
+        setUploadedFiles(allFiles)
+        if (step === "check-invoice") {
+          addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
+          handleWarrantyCheck()
+        } else {
+          applyNextStep(demoResult.next_step, demoResult.suggested_prompt, allFiles)
+        }
+        if (fileInputRef.current) fileInputRef.current.value = ""
+        return
       }
 
-      // Show OCR processing indicator with file-specific steps
+      // Real single upload
       const ocrMarker = `__ocr_processing_${Date.now()}`
       setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
 
       try {
-        addLog("request", `POST /api/cases/${caseId}/images`, { kind, filename: file.name, mime_type: file.type, size: file.size })
+        addLog("request", `POST /api/cases/${caseId}/images`, { kind: fileKind, filename: file.name, mime_type: file.type, size: file.size })
         const minDelay = new Promise((r) => setTimeout(r, 10000 + Math.random() * 26000))
-        const [result] = await Promise.all([uploadImage(caseId, kind as "product" | "label" | "packaging" | "pop", file), minDelay])
+        const [result] = await Promise.all([uploadImage(caseId, fileKind as "product" | "label" | "packaging" | "pop", file), minDelay])
         addLog("response", `POST /api/cases/${caseId}/images`, result)
-        newFiles.push({ file, kind, imageId: result.image_id, previewUrl })
-        // Remove processing card and show classification
+        newFiles.push({ file, kind: fileKind, imageId: result.image_id, previewUrl })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (result.classification) {
           addComponent("bot", <ClassificationCard classification={result.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
         } else {
-          addMsg("bot", `Received ${file.name} (${kind}). You can upload more or click **Run Verification** when ready.`)
+          addMsg("bot", `Received ${file.name} (${fileKind}).`)
+        }
+        const allFiles = [...uploadedFiles, ...newFiles]
+        setUploadedFiles(allFiles)
+        if (step === "check-invoice") {
+          addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
+          handleWarrantyCheck()
+        } else if (result.next_step) {
+          applyNextStep(result.next_step, result.suggested_prompt, allFiles)
+        } else {
+          // Fallback for older backends without next_step
+          if (step === "upload-product") {
+            addMsg("bot", "Thanks! Now please upload your **invoice or proof of purchase**.")
+            setStep("upload-invoice")
+          } else if (step === "upload-invoice") {
+            handleRunValidation(allFiles)
+          } else {
+            setStep("upload-preview")
+          }
         }
       } catch (err) {
         addLog("response", `POST /api/cases/${caseId}/images`, { error: String(err) })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         addMsg("bot", `Failed to upload ${file.name}. Please try again.`)
       }
-    }
-
-    const allFiles = [...uploadedFiles, ...newFiles]
-    setUploadedFiles(allFiles)
-    if (step === "upload-product") {
-      addMsg("bot", "Thanks! Now please upload your **invoice or proof of purchase** (receipt, PDF, or photo of invoice).")
-      setStep("upload-invoice")
-    } else if (step === "upload-invoice") {
-      addMsg("bot", "Invoice received. Running verification now...")
-      handleRunValidation(allFiles)
-    } else if (step === "check-invoice") {
-      addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
-      handleWarrantyCheck()
-    } else {
-      setStep("upload-preview")
     }
     if (fileInputRef.current) fileInputRef.current.value = ""
   }

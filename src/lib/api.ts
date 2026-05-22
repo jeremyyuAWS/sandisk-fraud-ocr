@@ -46,11 +46,21 @@ export interface Classification {
   specifications: ClassificationField[]
 }
 
+export type UploadNextStep = "upload_other_side" | "upload_invoice" | "validate"
+
 export interface UploadImageResponse {
   image_id: string
   kind: string
   filename: string
   classification?: Classification
+  next_step?: UploadNextStep
+  suggested_prompt?: string
+}
+
+export interface BulkUploadResponse {
+  uploads: UploadImageResponse[]
+  next_step?: UploadNextStep
+  suggested_prompt?: string
 }
 
 export interface ValidationCheck {
@@ -318,6 +328,25 @@ export async function uploadImage(
     signal: AbortSignal.timeout(30000),
   })
   if (!res.ok) throw new Error(`Upload image failed: ${res.status}`)
+  return res.json()
+}
+
+export async function uploadImagesBulk(
+  caseId: string,
+  kind: "product" | "label" | "packaging" | "pop",
+  files: File[]
+): Promise<BulkUploadResponse> {
+  const form = new FormData()
+  form.append("kind", kind)
+  for (const file of files) {
+    form.append("files[]", file)
+  }
+  const res = await fetch(`${API_BASE}/api/cases/${caseId}/images/bulk`, {
+    method: "POST",
+    body: form,
+    signal: AbortSignal.timeout(60000),
+  })
+  if (!res.ok) throw new Error(`Bulk upload failed: ${res.status}`)
   return res.json()
 }
 

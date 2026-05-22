@@ -1,4 +1,4 @@
-import type { UploadImageResponse, ValidateResponse, Classification } from "./api"
+import type { UploadImageResponse, BulkUploadResponse, ValidateResponse, Classification, UploadNextStep } from "./api"
 
 // Pre-cached demo file responses keyed by filename pattern.
 // When a file matches, the upload/validate calls return instantly without hitting the backend.
@@ -287,11 +287,18 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
   const product = findDemoProduct(filename)
   if (product) {
     lastDemoProductSku = product.sku
+    const isFront = normalizeFilename(filename).includes("front") || normalizeFilename(filename).includes("snap1")
+    const nextStep: UploadNextStep = isFront ? "upload_other_side" : "upload_invoice"
+    const suggestedPrompt = nextStep === "upload_other_side"
+      ? `Got it — I can see the **${product.product}**. Can you also upload the back of the device showing the label/serial number?`
+      : `Matched against authentic reference for **${product.product}** (${product.sku}). Now please upload your Flipkart invoice or proof of purchase.`
     return {
       image_id: `demo-img-${++demoImageCounter}`,
       kind: kind || "product",
       filename,
       classification: product.classification,
+      next_step: nextStep,
+      suggested_prompt: suggestedPrompt,
     }
   }
 
@@ -302,10 +309,50 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
       kind: "pop",
       filename,
       classification: invoice.classification,
+      next_step: "validate",
+      suggested_prompt: `Invoice from **${invoice.vendorName}** received. Running verification now...`,
     }
   }
 
   return null
+}
+
+export function getDemoBulkUploadResponse(filenames: string[], kind: string): BulkUploadResponse | null {
+  const uploads: UploadImageResponse[] = []
+  let hasAuthenticMatch = false
+
+  for (const filename of filenames) {
+    const product = findDemoProduct(filename)
+    if (product) {
+      lastDemoProductSku = product.sku
+      hasAuthenticMatch = true
+      uploads.push({
+        image_id: `demo-img-${++demoImageCounter}`,
+        kind: kind || "product",
+        filename,
+        classification: product.classification,
+      })
+    } else {
+      return null
+    }
+  }
+
+  if (uploads.length === 0) return null
+
+  const product = findDemoProduct(filenames[0])
+  const productName = product?.product || "SanDisk Product"
+  const sku = product?.sku || ""
+
+  const nextStep: UploadNextStep = hasAuthenticMatch ? "upload_invoice" : "upload_other_side"
+  const suggestedPrompt = hasAuthenticMatch
+    ? `Matched against authentic reference for **${productName}** (${sku}). Now please upload your Flipkart invoice or proof of purchase.`
+    : `Product images received. Can you upload the back of the device showing the label?`
+
+  return {
+    uploads,
+    next_step: nextStep,
+    suggested_prompt: suggestedPrompt,
+  }
 }
 
 export function getDemoValidateResponse(caseId: string, uploadedFiles: Array<{ file: File; kind: string }>): ValidateResponse | null {
