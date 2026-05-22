@@ -1247,10 +1247,19 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         } else if (result.next_step) {
           applyNextStep(result.next_step, result.suggested_prompt, allFiles)
         } else {
-          // Fallback for older backends without next_step
+          // Fallback: determine next step from classification type
           if (step === "upload-product") {
-            addMsg("bot", "Thanks! Now please upload your **invoice or proof of purchase**.")
-            setStep("upload-invoice")
+            const cls = result.classification
+            const hasSerialOrLabel = cls?.type === "label_serial" ||
+              cls?.tags?.some(t => ["serial", "label", "back"].includes(t)) ||
+              cls?.fields?.some(f => f.label.toLowerCase().includes("serial"))
+            if (hasSerialOrLabel) {
+              addMsg("bot", "Thanks! Now please upload your **invoice or proof of purchase**.")
+              setStep("upload-invoice")
+            } else {
+              addMsg("bot", "Got it! Can you also upload a photo of the **back of the product** showing the label and serial number? This helps us verify authenticity.")
+              setStep("upload-product")
+            }
           } else if (step === "upload-invoice") {
             handleRunValidation(allFiles)
           } else {
