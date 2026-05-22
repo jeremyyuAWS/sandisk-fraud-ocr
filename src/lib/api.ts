@@ -55,6 +55,7 @@ export interface UploadImageResponse {
   classification?: Classification
   next_step?: UploadNextStep
   suggested_prompt?: string
+  validation_result?: ValidateResponse
 }
 
 export interface BulkUploadResponse {

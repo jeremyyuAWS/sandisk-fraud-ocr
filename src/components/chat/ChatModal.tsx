@@ -1103,7 +1103,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     }
   }
 
-  function applyNextStep(nextStep: UploadNextStep | undefined, suggestedPrompt: string | undefined, allFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>) {
+  function applyNextStep(nextStep: UploadNextStep | undefined, suggestedPrompt: string | undefined, allFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>, validationResult?: ValidateResponse) {
     if (suggestedPrompt) {
       addMsg("bot", suggestedPrompt)
     }
@@ -1118,7 +1118,17 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         handleRunValidation(allFiles)
         break
       case "complete":
-        setStep("upload-preview")
+        if (validationResult) {
+          setValidationResult(validationResult)
+          addComponent("bot", <ValidationResultCard summary={validationResult.customer_summary} onGapAction={handleGapAction} />)
+          const v2 = validationResult.customer_summary.v2
+          if (v2?.authentic_reference?.matched) {
+            addComponent("bot", <AuthenticBadge reference={v2.authentic_reference} />)
+          }
+          setStep("issue-resolved-ask")
+        } else {
+          setStep("upload-preview")
+        }
         break
       default:
         setStep("upload-preview")
@@ -1229,11 +1239,11 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         setTimeout(scrollToBottom, 100)
         const allFiles = [...uploadedFiles, ...newFiles]
         setUploadedFiles(allFiles)
-        if (step === "check-invoice") {
+        if (step === "check-invoice" && demoResult.next_step !== "complete") {
           addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
           handleWarrantyCheck()
         } else {
-          applyNextStep(demoResult.next_step, demoResult.suggested_prompt, allFiles)
+          applyNextStep(demoResult.next_step, demoResult.suggested_prompt, allFiles, demoResult.validation_result)
         }
         setTimeout(scrollToBottom, 150)
         if (fileInputRef.current) fileInputRef.current.value = ""
@@ -1260,11 +1270,11 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         setTimeout(scrollToBottom, 100)
         const allFiles = [...uploadedFiles, ...newFiles]
         setUploadedFiles(allFiles)
-        if (step === "check-invoice") {
+        if (step === "check-invoice" && result.next_step !== "complete") {
           addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
           handleWarrantyCheck()
         } else if (result.next_step) {
-          applyNextStep(result.next_step, result.suggested_prompt, allFiles)
+          applyNextStep(result.next_step, result.suggested_prompt, allFiles, result.validation_result)
         } else {
           // Fallback for older backends without next_step
           if (step === "upload-product" || step === "upload-back") {

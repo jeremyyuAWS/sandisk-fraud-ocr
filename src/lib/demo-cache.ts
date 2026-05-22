@@ -325,16 +325,72 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
   const invoice = findDemoInvoice(filename)
   if (invoice) {
     const matchesUploaded = lastDemoProductSku === invoice.matchesSku
-    const suggestedPrompt = matchesUploaded
-      ? `Invoice from **${invoice.vendorName}** received — product matches ${invoice.matchesSku}. Running verification now...`
-      : `Invoice from **${invoice.vendorName}** received, but the product on the invoice (${invoice.matchesSku}) does not match the uploaded product. Please upload the correct invoice.`
-    return {
-      image_id: `demo-img-${++demoImageCounter}`,
-      kind: "pop",
-      filename,
-      classification: invoice.classification,
-      next_step: matchesUploaded ? "validate" : "upload_invoice",
-      suggested_prompt: suggestedPrompt,
+    if (matchesUploaded) {
+      const matchedProduct = Object.values(DEMO_PRODUCTS).find(p => p.sku === invoice.matchesSku)
+      const productName = matchedProduct?.product || "SanDisk Product"
+      const suggestedPrompt = `Invoice from **${invoice.vendorName}** verified. Product confirmed as genuine **${productName}** (${invoice.matchesSku}). Your warranty claim has been approved — you're eligible for a replacement.`
+      const validationResult: ValidateResponse = {
+        case_id: `demo-case`,
+        validation_id: `demo-val-${Date.now()}`,
+        decision: "auto_approve",
+        risk_score: 5,
+        customer_summary: {
+          headline: "Product Verified - Warranty Approved",
+          body: `Your ${productName} has been verified as authentic and your invoice from ${invoice.vendorName} confirms eligible warranty coverage.`,
+          risk_band: "Low",
+          decision: "auto_approve",
+          checks: [
+            { name: "Product Authenticity", result: "Passed", detail: "Matched against verified authentic reference" },
+            { name: "Invoice Validation", result: "Passed", detail: `${invoice.vendorName} is an authorized vendor` },
+            { name: "Purchase Date", result: "Passed", detail: `Invoice date ${invoice.invoiceDate} is within warranty window (${invoice.timeDeltaDays} days ago)` },
+            { name: "Product Match", result: "Passed", detail: `Invoice SKU matches product: ${invoice.matchesSku}` },
+          ],
+          warranty: "5-year limited warranty — eligible for RMA",
+          next_steps: ["Your product qualifies for a warranty replacement.", "An RMA will be created for you."],
+          v2: {
+            verdict_reasons: ["matched_authentic_reference"],
+            damage_observed: false,
+            damage_description: null,
+            product_family: productName,
+            identified_sku: { family_prefix: invoice.matchesSku.split("-")[0], full_sku: invoice.matchesSku },
+            playbook_used: "sandisk_flash_drive",
+            counterfeit_tells_matched: [],
+            pop_validation: {
+              vendor_authorized: true,
+              vendor_name: invoice.vendorName,
+              vendor_gstin: invoice.vendorGstin,
+              product_match: true,
+              date_plausible: true,
+              time_delta_days: invoice.timeDeltaDays,
+            },
+            fraud_correlations: [],
+            refinement: { attempted: false, succeeded: false, fields_added: [] },
+            gaps: [],
+            reason: "Product matched authentic reference and invoice verified from authorized vendor.",
+            recommended_next_action: "proceed_with_rma",
+            authentic_reference: { matched: true, product: productName, sku: invoice.matchesSku },
+          },
+        },
+      }
+      return {
+        image_id: `demo-img-${++demoImageCounter}`,
+        kind: "pop",
+        filename,
+        classification: invoice.classification,
+        next_step: "complete",
+        suggested_prompt: suggestedPrompt,
+        validation_result: validationResult,
+      }
+    } else {
+      const suggestedPrompt = `Invoice from **${invoice.vendorName}** received, but the product on the invoice (${invoice.matchesSku}) does not match the uploaded product. Please upload the correct invoice.`
+      return {
+        image_id: `demo-img-${++demoImageCounter}`,
+        kind: "pop",
+        filename,
+        classification: invoice.classification,
+        next_step: "upload_invoice",
+        suggested_prompt: suggestedPrompt,
+      }
     }
   }
 
