@@ -24,7 +24,7 @@ import {
   type Gap,
   type AuthenticReference,
 } from "@/lib/api"
-import { getDemoUploadResponse, getDemoBulkUploadResponse, getDemoValidateResponse } from "@/lib/demo-cache"
+import { getDemoUploadResponse, getDemoBulkUploadResponse, getDemoValidateResponse, resetDemoState } from "@/lib/demo-cache"
 
 // ---------------------------------------------------------------------------
 // Session log entry type
@@ -1086,6 +1086,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       const case_id = result.case_id
       addLog("response", "POST /api/cases", result)
       setCaseId(case_id)
+      resetDemoState()
       addMsg("bot", "I've opened a case for you. Let's start by verifying your product.\n\nPlease upload a **photo of your product** (front or back showing the label/serial number).")
       setStep("upload-product")
     } catch (err) {

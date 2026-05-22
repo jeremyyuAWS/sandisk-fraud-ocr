@@ -293,15 +293,25 @@ export function isDemoFile(filename: string): boolean {
 
 let demoImageCounter = 0
 let lastDemoProductSku: string | null = null
+let demoProductUploadCount: Record<string, number> = {}
+
+export function resetDemoState() {
+  demoImageCounter = 0
+  lastDemoProductSku = null
+  demoProductUploadCount = {}
+}
 
 export function getDemoUploadResponse(filename: string, kind: string): UploadImageResponse | null {
   const product = findDemoProduct(filename)
   if (product) {
     lastDemoProductSku = product.sku
-    const nextStep: UploadNextStep = product.canAuthenticate ? "upload_invoice" : "upload_other_side"
-    const suggestedPrompt = product.canAuthenticate
-      ? `Matched against authentic reference for **${product.product}** (${product.sku}). Now please upload your Flipkart invoice or proof of purchase.`
-      : `Got it — I can see the **${product.product}**. Can you also upload the back of the device showing the label/serial number?`
+    const prevCount = demoProductUploadCount[product.sku] || 0
+    demoProductUploadCount[product.sku] = prevCount + 1
+    const isSecondPhoto = prevCount >= 1
+    const nextStep: UploadNextStep = isSecondPhoto ? "upload_invoice" : "upload_other_side"
+    const suggestedPrompt = isSecondPhoto
+      ? `Product verified — genuine **${product.product}** (${product.sku}). Please upload your Flipkart invoice or proof of purchase to complete the return.`
+      : `Got it — I can see the **${product.product}**. Can you also upload a photo of the **back** of the device showing the label/serial number?`
     return {
       image_id: `demo-img-${++demoImageCounter}`,
       kind: kind || "product",
@@ -333,13 +343,13 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
 
 export function getDemoBulkUploadResponse(filenames: string[], kind: string): BulkUploadResponse | null {
   const uploads: UploadImageResponse[] = []
-  let hasAuthenticMatch = false
 
   for (const filename of filenames) {
     const product = findDemoProduct(filename)
     if (product) {
       lastDemoProductSku = product.sku
-      if (product.canAuthenticate) hasAuthenticMatch = true
+      const prevCount = demoProductUploadCount[product.sku] || 0
+      demoProductUploadCount[product.sku] = prevCount + 1
       uploads.push({
         image_id: `demo-img-${++demoImageCounter}`,
         kind: kind || "product",
@@ -357,10 +367,11 @@ export function getDemoBulkUploadResponse(filenames: string[], kind: string): Bu
   const productName = firstProduct?.product || "SanDisk Product"
   const sku = firstProduct?.sku || ""
 
-  const nextStep: UploadNextStep = hasAuthenticMatch ? "upload_invoice" : "upload_other_side"
-  const suggestedPrompt = hasAuthenticMatch
-    ? `Matched against authentic reference for **${productName}** (${sku}). Now please upload your Flipkart invoice or proof of purchase.`
-    : `Product images received. Can you also upload the back of the device showing the label/serial number?`
+  const hasBothSides = (demoProductUploadCount[sku] || 0) >= 2
+  const nextStep: UploadNextStep = hasBothSides ? "upload_invoice" : "upload_other_side"
+  const suggestedPrompt = hasBothSides
+    ? `Product verified — genuine **${productName}** (${sku}). Please upload your Flipkart invoice or proof of purchase.`
+    : `Product images received. Can you also upload a photo of the **back** of the device showing the label/serial number?`
 
   return {
     uploads,
