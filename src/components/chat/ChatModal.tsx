@@ -1043,10 +1043,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   useEffect(() => {
     if (open && messages.length === 0) {
       setMessages([
-        { from: "bot", text: "Hello! Welcome to SanDisk Support. To get started, may I have your **name**?", timestamp: now() },
+        { from: "bot", text: "Hello! Welcome to SanDisk Support. How can I help you today?", timestamp: now() },
       ])
-      setStep("capture-details")
-      setDetailsStep("name")
+      setStep("issue-select")
     }
   }, [open])
 
@@ -1249,16 +1248,17 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     if (detailsStep === "name") {
       setCustomerName(text)
       setDetailsStep("email")
-      addMsg("bot", `Thanks, **${text}**! What's your email address?`)
+      addMsg("bot", `Thanks, **${text}**! What's your email address so we can send shipping details?`)
     } else if (detailsStep === "email") {
       setCustomerEmail(text)
       setDetailsStep("contact")
-      addMsg("bot", "And a contact number? (or type 'skip' to proceed)")
+      addMsg("bot", "And a contact number? (or type 'skip')")
     } else if (detailsStep === "contact") {
       if (text.toLowerCase() !== "skip") setCustomerContact(text)
       setDetailsStep("done")
-      addMsg("bot", "Great, I have your details. How can I help you today?\n\nYou can select a category below or just describe your issue.")
-      setStep("issue-select")
+      const warrantyText = validationResult?.customer_summary?.warranty
+      addMsg("bot", `Perfect. I'm initiating the RMA process now.\n\n${warrantyText ? `**Coverage:** ${warrantyText}\n\n` : ""}A replacement request has been created. You'll receive an email at **${customerEmail || text}** with shipping instructions and a prepaid return label.\n\nIs there anything else I can help with?`)
+      setStep("process-rma")
     }
   }
 
@@ -1300,8 +1300,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     const warrantyText = summary?.warranty
 
     if (summary?.decision === "auto_approve" || (popValid?.product_match && popValid?.date_plausible)) {
-      addMsg("bot", `Your product is eligible for warranty replacement.\n\n${warrantyText ? `**Coverage:** ${warrantyText}` : ""}\n\nI'm initiating the RMA process for you. A replacement request has been created, and you'll receive an email at **${customerEmail || "your registered email"}** with shipping instructions.`)
-      setStep("process-rma")
+      addMsg("bot", `Your product is eligible for warranty replacement.${warrantyText ? `\n\n**Coverage:** ${warrantyText}` : ""}\n\nTo process your return, I'll need a few details. What is your **name**?`)
+      setStep("capture-details")
+      setDetailsStep("name")
     } else if (summary?.decision === "auto_reject") {
       addMsg("bot", "Unfortunately, based on our verification, this product is **not eligible** for warranty coverage.\n\nReasons:\n" + (v2?.verdict_reasons.map(r => `- ${humanizeVerdictReason(r)}`).join("\n") || "- Verification checks did not pass") + "\n\nYou may purchase a replacement from an authorized SanDisk retailer. Would you like to speak to an agent for further assistance?")
       setStep("warranty-void")
@@ -1337,9 +1338,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     setCustomerContact("")
     setDetailsStep("name")
     setTimeout(() => {
-      setMessages([{ from: "bot", text: "Hello! Welcome to SanDisk Support. To get started, may I have your **name**?", timestamp: now() }])
-      setStep("capture-details")
-      setDetailsStep("name")
+      setMessages([{ from: "bot", text: "Hello! Welcome to SanDisk Support. How can I help you today?", timestamp: now() }])
+      setStep("issue-select")
     }, 100)
   }
 
