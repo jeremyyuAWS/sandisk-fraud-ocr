@@ -645,6 +645,25 @@ const OCR_STEPS_INVOICE = [
   { label: "Matching product to catalog...", pct: 95 },
 ]
 
+const OCR_STEPS_POP = [
+  { label: "Scanning document...", pct: 5 },
+  { label: "Detecting document type...", pct: 10 },
+  { label: "Analyzing document layout...", pct: 16 },
+  { label: "Extracting seller information...", pct: 24 },
+  { label: "Reading invoice number and date...", pct: 32 },
+  { label: "Extracting line items...", pct: 40 },
+  { label: "Parsing product descriptions...", pct: 48 },
+  { label: "Reading HSN codes and quantities...", pct: 54 },
+  { label: "Extracting tax breakdown (IGST/CGST)...", pct: 60 },
+  { label: "Verifying seller GSTIN...", pct: 66 },
+  { label: "Checking authorized vendor registry...", pct: 72 },
+  { label: "Matching invoice product to uploaded photos...", pct: 78 },
+  { label: "Validating purchase date against warranty window...", pct: 84 },
+  { label: "Cross-referencing serial numbers...", pct: 90 },
+  { label: "Running warranty eligibility check...", pct: 95 },
+  { label: "Generating verdict...", pct: 98 },
+]
+
 const OCR_STEPS_LABEL = [
   { label: "Detecting label region...", pct: 15 },
   { label: "Enhancing text contrast...", pct: 30 },
@@ -673,7 +692,8 @@ const OCR_STEPS_PDF = [
   { label: "Completing analysis...", pct: 95 },
 ]
 
-function getOcrSteps(filename: string): Array<{ label: string; pct: number }> {
+function getOcrSteps(filename: string, kind?: string): Array<{ label: string; pct: number }> {
+  if (kind === "pop") return OCR_STEPS_POP
   const lower = filename.toLowerCase()
   if (lower.endsWith(".pdf")) return OCR_STEPS_PDF
   if (lower.includes("invoice") || lower.includes("receipt") || lower.includes("memo") || lower.includes("warranty_letter")) return OCR_STEPS_INVOICE
@@ -681,15 +701,15 @@ function getOcrSteps(filename: string): Array<{ label: string; pct: number }> {
   return OCR_STEPS_PRODUCT
 }
 
-function OcrProcessingCard({ filename }: { filename: string }) {
-  const steps = getOcrSteps(filename)
+function OcrProcessingCard({ filename, kind }: { filename: string; kind?: string }) {
+  const steps = getOcrSteps(filename, kind)
   const [stepIdx, setStepIdx] = useState(0)
   const [progress, setProgress] = useState(0)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
 
   const delaysRef = useRef<number[]>([])
   if (delaysRef.current.length === 0) {
-    const totalTarget = 10000 + Math.random() * 26000
+    const totalTarget = kind === "pop" ? 18000 + Math.random() * 30000 : 10000 + Math.random() * 26000
     const weights = steps.map(() => 0.3 + Math.random() * 2.5)
     const wSum = weights.reduce((a, b) => a + b, 0)
     delaysRef.current = weights.map((w) => (w / wSum) * totalTarget)
@@ -730,8 +750,8 @@ function OcrProcessingCard({ filename }: { filename: string }) {
       <CardContent className="p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ScanSearch className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold text-foreground">Processing: {filename.length > 30 ? filename.slice(0, 28) + "..." : filename}</span>
+            {kind === "pop" ? <Receipt className="h-4 w-4 text-muted-foreground" /> : <ScanSearch className="h-4 w-4 text-muted-foreground" />}
+            <span className="text-sm font-semibold text-foreground">{kind === "pop" ? "Verifying Invoice" : "Processing"}: {filename.length > 30 ? filename.slice(0, 28) + "..." : filename}</span>
           </div>
           <span className="text-xs font-mono text-muted-foreground">{Math.round(progress)}%</span>
         </div>
@@ -1161,7 +1181,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     // Bulk upload path: multiple product files
     if (fileList.length > 1 && kind === "product") {
       const ocrMarker = `__ocr_processing_${Date.now()}`
-      setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={`${fileList.length} files`} />, timestamp: ocrMarker }])
+      setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={`${fileList.length} files`} kind={kind} />, timestamp: ocrMarker }])
       setTimeout(scrollToBottom, 50)
 
       // Check demo bulk cache
@@ -1226,10 +1246,10 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       const demoResult = getDemoUploadResponse(file.name, fileKind)
       if (demoResult) {
         const ocrMarker = `__ocr_processing_${Date.now()}`
-        setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
+        setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} kind={fileKind} />, timestamp: ocrMarker }])
         setTimeout(scrollToBottom, 50)
         addLog("request", `POST /api/cases/${caseId}/images`, { kind: fileKind, filename: file.name, demo: true })
-        await new Promise((r) => setTimeout(r, 800))
+        await new Promise((r) => setTimeout(r, fileKind === "pop" ? 18000 + Math.random() * 12000 : 800))
         addLog("response", `POST /api/cases/${caseId}/images`, demoResult)
         newFiles.push({ file, kind: fileKind, imageId: demoResult.image_id, previewUrl })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
@@ -1252,12 +1272,12 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
 
       // Real single upload
       const ocrMarker = `__ocr_processing_${Date.now()}`
-      setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} />, timestamp: ocrMarker }])
+      setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} kind={fileKind} />, timestamp: ocrMarker }])
       setTimeout(scrollToBottom, 50)
 
       try {
         addLog("request", `POST /api/cases/${caseId}/images`, { kind: fileKind, filename: file.name, mime_type: file.type, size: file.size })
-        const minDelay = new Promise((r) => setTimeout(r, 10000 + Math.random() * 26000))
+        const minDelay = new Promise((r) => setTimeout(r, fileKind === "pop" ? 18000 + Math.random() * 30000 : 10000 + Math.random() * 26000))
         const [result] = await Promise.all([uploadImage(caseId, fileKind as "product" | "label" | "packaging" | "pop", file), minDelay])
         addLog("response", `POST /api/cases/${caseId}/images`, result)
         newFiles.push({ file, kind: fileKind, imageId: result.image_id, previewUrl })
