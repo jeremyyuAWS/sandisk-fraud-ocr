@@ -310,8 +310,8 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
     const isSecondPhoto = prevCount >= 1
     const nextStep: UploadNextStep = isSecondPhoto ? "upload_invoice" : "upload_other_side"
     const suggestedPrompt = isSecondPhoto
-      ? `Product verified — genuine **${product.product}** (${product.sku}). Please upload your Flipkart invoice or proof of purchase to complete the return.`
-      : `Got it — I can see the **${product.product}**. Can you also upload a photo of the **back** of the device showing the label/serial number?`
+      ? `Product details captured. Please upload your invoice or proof of purchase.`
+      : `Got the front — could you also upload a photo of the back of the device? The back label has the serial and batch code we need to log the claim.`
     return {
       image_id: `demo-img-${++demoImageCounter}`,
       kind: kind || "product",
