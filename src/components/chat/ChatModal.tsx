@@ -1512,7 +1512,14 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     const action = validationResult?.customer_summary?.v2?.recommended_next_action
     if (!action) return "Speak to Agent"
     const labels: Record<string, string> = {
-      escalate_to_damage_policy_review: "Speak to Damage Specialist",
+      proceed_with_rma: "Approve RMA",
+      request_proof_of_purchase: "Upload Invoice",
+      upload_correct_invoice: "Upload Correct Invoice",
+      escalate_to_damage_policy_review: "Escalate to Damage Review",
+      reject_rma_counterfeit: "Reject \u2014 Confirmed Counterfeit",
+      escalate_for_review: "Flag for Agent Review",
+      reject_rma: "Reject RMA",
+      request_product_photos: "Request Product Photos",
       escalate_to_fraud_review: "Speak to Fraud Specialist",
       escalate_to_agent: "Speak to Agent",
       request_more_info: "Upload More Info",

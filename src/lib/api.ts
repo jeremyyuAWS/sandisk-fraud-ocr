@@ -432,6 +432,7 @@ export async function getAgentOverrideStats(): Promise<OverrideStats> {
 // ---------------------------------------------------------------------------
 
 export const VERDICT_REASON_COPY: Record<string, string> = {
+  matched_counterfeit_reference: "This product matches a confirmed counterfeit in our database.",
   capacity_code_structurally_invalid: "Batch code uses an invalid capacity prefix.",
   capacity_code_anomaly_with_corroborating_tells: "Capacity-code anomaly combined with other counterfeit signals.",
   multiple_counterfeit_tells_matched: "Multiple counterfeit tells matched the known-fakes catalog.",
