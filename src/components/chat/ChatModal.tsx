@@ -632,6 +632,96 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
 }
 
 // ---------------------------------------------------------------------------
+// Shipping Label Card (simulated RMA shipping details)
+// ---------------------------------------------------------------------------
+
+function ShippingLabelCard({ customerName, rmaNumber, productName }: { customerName: string; rmaNumber: string; productName: string }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <Card className="border border-border">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Package className="h-4 w-4 text-foreground" />
+          <span className="text-sm font-semibold text-foreground">Shipping Label - RMA #{rmaNumber}</span>
+        </div>
+        <Separator />
+
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Ship To</div>
+          <div className="bg-muted/50 rounded-lg p-3 border border-border font-mono text-xs leading-relaxed">
+            <div className="font-semibold text-foreground">SanDisk / Western Digital RMA Center</div>
+            <div className="text-foreground">Attn: Warranty Returns - {rmaNumber}</div>
+            <div className="text-foreground">Plot No. B-37, MIDC Industrial Area</div>
+            <div className="text-foreground">Mahape, Navi Mumbai 400 710</div>
+            <div className="text-foreground">Maharashtra, India</div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">From</div>
+          <div className="bg-muted/50 rounded-lg p-3 border border-border font-mono text-xs leading-relaxed">
+            <div className="font-semibold text-foreground">{customerName}</div>
+            <div className="text-muted-foreground">(Your registered address)</div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-muted/50 rounded p-2 border border-border">
+            <div className="text-muted-foreground">Product</div>
+            <div className="font-medium text-foreground">{productName}</div>
+          </div>
+          <div className="bg-muted/50 rounded p-2 border border-border">
+            <div className="text-muted-foreground">Turnaround</div>
+            <div className="font-medium text-foreground">7 business days</div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          Packaging instructions
+        </button>
+
+        {expanded && (
+          <div className="space-y-2 text-xs text-foreground border-t border-border pt-2">
+            <div className="flex items-start gap-2">
+              <span className="font-semibold text-muted-foreground shrink-0">1.</span>
+              <span>Use a <strong>padded envelope</strong> with bubble wrap or internal cushioning material.</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-semibold text-muted-foreground shrink-0">2.</span>
+              <span>Print your warranty confirmation email and insert it with the product.</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-semibold text-muted-foreground shrink-0">3.</span>
+              <span><strong>Do NOT send accessories</strong> (cables, cases, adapters, headphones).</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-semibold text-muted-foreground shrink-0">4.</span>
+              <span>Seal the envelope securely with tape.</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-semibold text-muted-foreground shrink-0">5.</span>
+              <span>Attach the prepaid shipping label (sent to your email) to the outside.</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-semibold text-muted-foreground shrink-0">6.</span>
+              <span>Drop off at your nearest courier pickup point or schedule a collection.</span>
+            </div>
+            <div className="mt-2 p-2 bg-muted rounded border border-border text-muted-foreground">
+              <strong>Important:</strong> Returns without the product or with altered shipping labels will not be processed. Request a tracking number and receipt from the carrier.
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // OCR Processing Spinner (shown during image upload)
 // ---------------------------------------------------------------------------
 
@@ -1463,7 +1553,12 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       if (text.toLowerCase() !== "skip") setCustomerContact(text)
       setDetailsStep("done")
       const warrantyText = validationResult?.customer_summary?.warranty
-      addMsg("bot", `Perfect. I'm initiating the RMA process now.\n\n${warrantyText ? `**Coverage:** ${warrantyText}\n\n` : ""}A replacement request has been created. You'll receive an email at **${customerEmail || text}** with shipping instructions and a prepaid return label.\n\nIs there anything else I can help with?`)
+      const v2 = validationResult?.customer_summary?.v2
+      const productName = v2?.product_family || "SanDisk Product"
+      const rmaNumber = `RMA-${Date.now().toString(36).toUpperCase().slice(-6)}-IN`
+      addMsg("bot", `Perfect. I'm initiating the RMA process now.\n\n${warrantyText ? `**Coverage:** ${warrantyText}\n\n` : ""}Your replacement request **${rmaNumber}** has been created. A prepaid shipping label has been sent to **${customerEmail || text}**.`)
+      addComponent("bot", <ShippingLabelCard customerName={customerName || "Customer"} rmaNumber={rmaNumber} productName={productName} />)
+      addMsg("bot", "Once we receive and verify your product, a replacement will be shipped within **7 business days**.\n\nIs there anything else I can help with?")
       setStep("process-rma")
     }
   }
