@@ -160,12 +160,42 @@ export interface CustomerSummary {
   v2?: V2Verdict
 }
 
+export interface RMAReturnAddress {
+  company: string
+  attn: string
+  street: string
+  city: string
+  state: string
+  zip: string
+  country: string
+}
+
+export interface RMAPackagingStep {
+  step: number
+  icon: string
+  title: string
+  detail: string
+}
+
+export interface RMADetails {
+  rma_number: string
+  case_id: string
+  product: string
+  status: "approved"
+  return_address: RMAReturnAddress
+  packaging_steps: RMAPackagingStep[]
+  replacement_lead_time: string
+  rma_valid_days: number
+  chat_message: string
+}
+
 export interface ValidateResponse {
   case_id: string
   validation_id: string | null
   decision: Decision
   risk_score: number
   customer_summary: CustomerSummary
+  rma?: RMADetails
 }
 
 export interface CaseImage {

@@ -370,14 +370,42 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
         },
       },
     }
+    const rmaNumber = `RMA-${Date.now().toString(36).toUpperCase().slice(-6)}-IN`
     return {
       image_id: `demo-img-${++demoImageCounter}`,
       kind: "pop",
       filename,
-      classification: invoice.classification,
-      next_step: "complete",
+      classification: { ...invoice.classification, chat_message: suggestedPrompt },
+      next_step: "complete" as const,
       suggested_prompt: suggestedPrompt,
-      validation_result: validationResult,
+      validation_result: {
+        ...validationResult,
+        rma: {
+          rma_number: rmaNumber,
+          case_id: "demo-case",
+          product: `${productName} (${invoice.matchesSku})`,
+          status: "approved" as const,
+          return_address: {
+            company: "Western Digital Technologies, Inc.",
+            attn: `SanDisk Warranty Returns — ${rmaNumber}`,
+            street: "Plot No. B-37, MIDC Industrial Area",
+            city: "Navi Mumbai",
+            state: "Maharashtra",
+            zip: "400 710",
+            country: "India",
+          },
+          packaging_steps: [
+            { step: 1, icon: "\u{1F4E6}", title: "Use a padded envelope", detail: "Place your product in a padded envelope with bubble wrap or internal cushioning." },
+            { step: 2, icon: "\u{1F3F7}\uFE0F", title: `Mark your RMA number: ${rmaNumber}`, detail: "Write the RMA number clearly on the outside of the package." },
+            { step: 3, icon: "\u{1F4C4}", title: "Include confirmation email", detail: "Print and insert your warranty confirmation email with the product." },
+            { step: 4, icon: "\u{1F6AB}", title: "Do NOT send accessories", detail: "Do not include cables, cases, adapters, or headphones." },
+            { step: 5, icon: "\u{1F69A}", title: "Ship via tracked carrier", detail: "Drop off at your nearest courier point and keep the tracking number." },
+          ],
+          replacement_lead_time: "5-7 business days after receipt",
+          rma_valid_days: 30,
+          chat_message: `Your RMA ${rmaNumber} has been approved. Ship your product within 30 days.`,
+        },
+      },
     }
   }
 

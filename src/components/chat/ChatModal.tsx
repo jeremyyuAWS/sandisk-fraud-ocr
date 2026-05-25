@@ -23,6 +23,7 @@ import {
   type V2Verdict,
   type Gap,
   type AuthenticReference,
+  type RMADetails,
 } from "@/lib/api"
 import { getDemoUploadResponse, getDemoBulkUploadResponse, getDemoValidateResponse, resetDemoState } from "@/lib/demo-cache"
 
@@ -722,6 +723,76 @@ function ShippingLabelCard({ customerName, rmaNumber, productName }: { customerN
 }
 
 // ---------------------------------------------------------------------------
+// RMA Panel Card (renders backend-driven RMADetails)
+// ---------------------------------------------------------------------------
+
+function RMAPanelCard({ rma }: { rma: RMADetails }) {
+  const [stepsExpanded, setStepsExpanded] = useState(false)
+  const addr = rma.return_address
+
+  return (
+    <Card className="border border-green-200 bg-green-50/50">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Package className="h-4 w-4 text-green-700" />
+          <span className="text-sm font-semibold text-green-800">RMA #{rma.rma_number}</span>
+          <Badge variant="outline" className="ml-auto text-[10px] border-green-300 text-green-700">Approved</Badge>
+        </div>
+        <Separator className="bg-green-200" />
+
+        <div className="text-xs text-green-700 font-medium">
+          Ship within {rma.rma_valid_days} days of approval
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-white rounded p-2 border border-green-200">
+            <div className="text-muted-foreground">Product</div>
+            <div className="font-medium text-foreground">{rma.product}</div>
+          </div>
+          <div className="bg-white rounded p-2 border border-green-200">
+            <div className="text-muted-foreground">Replacement ships in</div>
+            <div className="font-medium text-foreground">{rma.replacement_lead_time}</div>
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Return Address</div>
+          <div className="bg-white rounded-lg p-3 border border-green-200 font-mono text-xs leading-relaxed">
+            <div className="font-semibold text-foreground">{addr.company}</div>
+            <div className="text-foreground">Attn: {addr.attn}</div>
+            <div className="text-foreground">{addr.street}</div>
+            <div className="text-foreground">{addr.city}, {addr.state} {addr.zip}</div>
+            <div className="text-foreground">{addr.country}</div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setStepsExpanded(!stepsExpanded)}
+          className="flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-900 transition-colors"
+        >
+          {stepsExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          Packaging instructions ({rma.packaging_steps.length} steps)
+        </button>
+
+        {stepsExpanded && (
+          <div className="space-y-2 text-xs text-foreground border-t border-green-200 pt-2">
+            {rma.packaging_steps.map((s) => (
+              <div key={s.step} className="flex items-start gap-2">
+                <span className="shrink-0">{s.icon}</span>
+                <div>
+                  <div className="font-medium">{s.title}</div>
+                  <div className="text-muted-foreground">{s.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // OCR Processing Spinner (shown during image upload)
 // ---------------------------------------------------------------------------
 
@@ -1213,10 +1284,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     }
   }
 
-  function applyNextStep(nextStep: UploadNextStep | undefined, suggestedPrompt: string | undefined, allFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>, validationResult?: ValidateResponse) {
-    if (suggestedPrompt) {
-      addMsg("bot", suggestedPrompt)
-    }
+  function applyNextStep(nextStep: UploadNextStep | undefined, _unused: string | undefined, allFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>, validationResult?: ValidateResponse) {
     switch (nextStep) {
       case "upload_other_side":
         setStep("upload-back")
@@ -1230,12 +1298,26 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       case "complete":
         if (validationResult) {
           setValidationResult(validationResult)
-          addComponent("bot", <ValidationResultCard summary={validationResult.customer_summary} onGapAction={handleGapAction} />)
-          const v2 = validationResult.customer_summary.v2
-          if (v2?.authentic_reference?.matched) {
-            addComponent("bot", <AuthenticBadge reference={v2.authentic_reference} />)
+          const decision = validationResult.decision
+          if (decision === "auto_approve") {
+            addComponent("bot", <ValidationResultCard summary={validationResult.customer_summary} onGapAction={handleGapAction} />)
+            const v2 = validationResult.customer_summary.v2
+            if (v2?.authentic_reference?.matched) {
+              addComponent("bot", <AuthenticBadge reference={v2.authentic_reference} />)
+            }
+            if (validationResult.rma) {
+              addComponent("bot", <RMAPanelCard rma={validationResult.rma} />)
+              setStep("process-rma")
+            } else {
+              setStep("issue-resolved-ask")
+            }
+          } else if (decision === "auto_reject") {
+            addComponent("bot", <ValidationResultCard summary={validationResult.customer_summary} onGapAction={handleGapAction} />)
+            setStep("warranty-void")
+          } else {
+            addComponent("bot", <ValidationResultCard summary={validationResult.customer_summary} onGapAction={handleGapAction} />)
+            setStep("escalated")
           }
-          setStep("issue-resolved-ask")
         } else {
           setStep("upload-preview")
         }
@@ -1805,7 +1887,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip className="h-3.5 w-3.5 mr-1.5" />
-                {step === "upload-back" ? "Upload Back Photo" : "Upload Product Photo"}
+                {step === "upload-back" ? "Upload back of device" : "Upload Product Photo"}
               </Button>
             </div>
             <input
@@ -1829,7 +1911,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Paperclip className="h-3.5 w-3.5 mr-1.5" />
-                Upload Invoice / Receipt
+                Upload invoice / proof of purchase
               </Button>
             </div>
             <input
@@ -1930,7 +2012,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
               onClick={() => fileInputRef.current?.click()}
             >
               <Paperclip className="h-3.5 w-3.5 mr-1.5" />
-              Upload Invoice / Receipt
+              Upload invoice / proof of purchase
             </Button>
             <input
               ref={fileInputRef}
