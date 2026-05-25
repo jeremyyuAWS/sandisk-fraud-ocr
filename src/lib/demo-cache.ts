@@ -309,16 +309,16 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
     demoProductUploadCount[product.sku] = prevCount + 1
     const isSecondPhoto = prevCount >= 1
     const nextStep: UploadNextStep = isSecondPhoto ? "upload_invoice" : "upload_other_side"
-    const suggestedPrompt = isSecondPhoto
+    const chatMessage = isSecondPhoto
       ? `Product details captured. Please upload your invoice or proof of purchase.`
       : `Got the front — could you also upload a photo of the back of the device? The back label has the serial and batch code we need to log the claim.`
     return {
       image_id: `demo-img-${++demoImageCounter}`,
       kind: kind || "product",
       filename,
-      classification: product.classification,
+      classification: { ...product.classification, chat_message: chatMessage },
       next_step: nextStep,
-      suggested_prompt: suggestedPrompt,
+      suggested_prompt: chatMessage,
     }
   }
 

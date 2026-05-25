@@ -542,7 +542,7 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start gap-2">
           <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
-          <div className="text-sm text-foreground leading-relaxed"><MarkdownMessage content={classification.description || classification.chat_message} /></div>
+          <div className="text-sm text-foreground leading-relaxed"><MarkdownMessage content={classification.chat_message} /></div>
         </div>
 
         {previewUrl && (
@@ -1287,12 +1287,13 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
           newFiles.push({ file, kind, imageId: upload.image_id, previewUrl })
           if (upload.classification) {
+            addMsg("bot", upload.classification.chat_message)
             addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
           }
         }
         const allFiles = [...uploadedFiles, ...newFiles]
         setUploadedFiles(allFiles)
-        applyNextStep(demoBulk.next_step, demoBulk.suggested_prompt, allFiles)
+        applyNextStep(demoBulk.next_step, undefined, allFiles)
         if (fileInputRef.current) fileInputRef.current.value = ""
         return
       }
@@ -1310,12 +1311,13 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
           newFiles.push({ file, kind, imageId: upload.image_id, previewUrl })
           if (upload.classification?.chat_message) {
+            addMsg("bot", upload.classification.chat_message)
             addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
           }
         }
         const allFiles = [...uploadedFiles, ...newFiles]
         setUploadedFiles(allFiles)
-        applyNextStep(result.next_step, result.suggested_prompt, allFiles)
+        applyNextStep(result.next_step, undefined, allFiles)
       } catch (err) {
         addLog("response", `POST /api/cases/${caseId}/images/bulk`, { error: String(err) })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
@@ -1344,6 +1346,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         newFiles.push({ file, kind: fileKind, imageId: demoResult.image_id, previewUrl })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (demoResult.classification) {
+          addMsg("bot", demoResult.classification.chat_message)
           addComponent("bot", <ClassificationCard classification={demoResult.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
         }
         setTimeout(scrollToBottom, 100)
@@ -1353,7 +1356,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
           handleWarrantyCheck()
         } else {
-          applyNextStep(demoResult.next_step, demoResult.suggested_prompt, allFiles, demoResult.validation_result)
+          applyNextStep(demoResult.next_step, undefined, allFiles, demoResult.validation_result)
         }
         setTimeout(scrollToBottom, 150)
         if (fileInputRef.current) fileInputRef.current.value = ""
@@ -1373,6 +1376,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         newFiles.push({ file, kind: fileKind, imageId: result.image_id, previewUrl })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (result.classification) {
+          addMsg("bot", result.classification.chat_message)
           addComponent("bot", <ClassificationCard classification={result.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
         } else {
           addMsg("bot", `Received ${file.name} (${fileKind}).`)
@@ -1384,7 +1388,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           addMsg("bot", "Thank you for the invoice. Let me check your warranty eligibility...")
           handleWarrantyCheck()
         } else if (result.next_step) {
-          applyNextStep(result.next_step, result.suggested_prompt, allFiles, result.validation_result)
+          applyNextStep(result.next_step, undefined, allFiles, result.validation_result)
         } else {
           // Fallback for older backends without next_step
           if (step === "upload-product" || step === "upload-back") {
