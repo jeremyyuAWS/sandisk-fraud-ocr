@@ -1369,8 +1369,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
           newFiles.push({ file, kind, imageId: upload.image_id, previewUrl })
           if (upload.classification) {
-            addMsg("bot", upload.classification.chat_message)
             addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+            addMsg("bot", upload.classification.chat_message)
           }
         }
         const allFiles = [...uploadedFiles, ...newFiles]
@@ -1393,8 +1393,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
           newFiles.push({ file, kind, imageId: upload.image_id, previewUrl })
           if (upload.classification?.chat_message) {
-            addMsg("bot", upload.classification.chat_message)
             addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+            addMsg("bot", upload.classification.chat_message)
           }
         }
         const allFiles = [...uploadedFiles, ...newFiles]
@@ -1428,8 +1428,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         newFiles.push({ file, kind: fileKind, imageId: demoResult.image_id, previewUrl })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (demoResult.classification) {
-          addMsg("bot", demoResult.classification.chat_message)
           addComponent("bot", <ClassificationCard classification={demoResult.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+          addMsg("bot", demoResult.classification.chat_message)
         }
         setTimeout(scrollToBottom, 100)
         const allFiles = [...uploadedFiles, ...newFiles]
@@ -1458,8 +1458,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         newFiles.push({ file, kind: fileKind, imageId: result.image_id, previewUrl })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (result.classification) {
-          addMsg("bot", result.classification.chat_message)
           addComponent("bot", <ClassificationCard classification={result.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+          addMsg("bot", result.classification.chat_message)
         } else {
           addMsg("bot", `Received ${file.name} (${fileKind}).`)
         }
