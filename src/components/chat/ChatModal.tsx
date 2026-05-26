@@ -543,7 +543,7 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start gap-2">
           <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />
-          <div className="text-sm text-foreground leading-relaxed"><MarkdownMessage content={classification.chat_message} /></div>
+          <div className="text-sm text-foreground leading-relaxed"><MarkdownMessage content={classification.description} /></div>
         </div>
 
         {previewUrl && (
