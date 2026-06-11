@@ -1618,9 +1618,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         handleIssueNotResolved()
       }
     } else if (step === "troubleshoot") {
-      if (caseId) sendMessage(caseId, text, "customer").catch(() => {})
+      if (caseId) sendMessage(caseId, text, "customer").then((r) => { if (r.ai_reply) addMsg("bot", r.ai_reply) }).catch(() => {})
     } else if (caseId) {
-      sendMessage(caseId, text, "customer").catch(() => {})
+      sendMessage(caseId, text, "customer").then((r) => { if (r.ai_reply) addMsg("bot", r.ai_reply) }).catch(() => {})
     }
   }
 

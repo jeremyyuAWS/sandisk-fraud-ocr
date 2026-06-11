@@ -29,6 +29,7 @@ export interface ChatMessageResponse {
   role: "customer" | "assistant" | "system"
   text: string
   intent: IssueType | null
+  ai_reply?: string
 }
 
 export interface ClassificationField {
