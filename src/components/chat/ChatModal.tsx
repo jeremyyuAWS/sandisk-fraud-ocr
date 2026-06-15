@@ -725,6 +725,63 @@ function ShippingLabelCard({ customerName, rmaNumber, productName }: { customerN
 }
 
 // ---------------------------------------------------------------------------
+// Live Orchestration Timeline Card
+// ---------------------------------------------------------------------------
+
+interface OrcStep { label: string; warn?: boolean }
+
+function OrchestrationCard({
+  title,
+  steps,
+  onComplete,
+}: {
+  title: string
+  steps: OrcStep[]
+  onComplete?: () => void
+}) {
+  const [shown, setShown] = useState(0)
+  const firedRef = useRef(false)
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
+
+  useEffect(() => {
+    if (shown >= steps.length) return
+    const t = setTimeout(() => setShown((s) => s + 1), 440 + Math.random() * 360)
+    return () => clearTimeout(t)
+  }, [shown, steps.length])
+
+  useEffect(() => {
+    if (shown >= steps.length && steps.length > 0 && !firedRef.current) {
+      firedRef.current = true
+      setTimeout(() => onCompleteRef.current?.(), 400)
+    }
+  }, [shown, steps.length])
+
+  const done = shown >= steps.length
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs space-y-1.5 font-mono">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-sans mb-2 flex items-center gap-1.5">
+        <span className={`inline-block h-1.5 w-1.5 rounded-full ${done ? "bg-green-500" : "bg-blue-500 animate-pulse"}`} />
+        {title}
+      </div>
+      {steps.slice(0, shown).map((s, i) => (
+        <div key={i} className={`flex items-start gap-2 ${s.warn ? "text-amber-600" : "text-green-700 dark:text-green-400"}`}>
+          <span className="shrink-0 mt-px">{s.warn ? "⚠" : "✓"}</span>
+          <span>{s.label}</span>
+        </div>
+      ))}
+      {!done && (
+        <div className="flex items-start gap-2 text-blue-600 dark:text-blue-400">
+          <span className="shrink-0 mt-px animate-spin inline-block">↻</span>
+          <span className="text-muted-foreground">{steps[shown]?.label}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // RMA Panel Card (renders backend-driven RMADetails)
 // ---------------------------------------------------------------------------
 
@@ -1708,28 +1765,101 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   function handleChooseReplacement() {
     const v2 = validationResult?.customer_summary?.v2
     const productName = v2?.product_family || "SanDisk Product"
-    if (pendingRma) {
-      addComponent("bot", <RMAPanelCard rma={pendingRma} />)
-      addMsg("bot", "Your replacement has been arranged! Check the RMA details above for the return address and packaging instructions.\n\nIs there anything else I can help with?")
-    } else {
-      const rmaNumber = `RMA-${Date.now().toString(36).toUpperCase().slice(-6)}-IN`
-      addMsg("bot", `Great! I'm processing your replacement now.\n\nYour RMA number is **${rmaNumber}**. A prepaid shipping label will be emailed to you shortly.`)
-      addComponent("bot", <ShippingLabelCard customerName={customerName || "Customer"} rmaNumber={rmaNumber} productName={productName} />)
-      addMsg("bot", "Once we receive your product, a replacement will be shipped within **7 business days**.\n\nIs there anything else I can help with?")
-    }
-    setStep("process-rma")
+    const rmaNumber = pendingRma?.rma_number ?? `RMA-${Date.now().toString(36).toUpperCase().slice(-6)}-IN`
+
+    const phase1Steps: OrcStep[] = [
+      { label: "Customer verified" },
+      { label: "Warranty eligibility confirmed" },
+      { label: "Product defect validated" },
+      { label: "Checking warehouse inventory..." },
+      { label: "Inventory available" },
+      { label: "Reserving replacement unit" },
+      { label: "Creating replacement order" },
+      { label: "Updating ERP / Order Management System" },
+      { label: "Generating fulfillment request" },
+      { label: "Notifying third-party logistics provider" },
+      { label: "Recording transaction in CRM" },
+      { label: `Replacement order confirmed — ${rmaNumber}` },
+    ]
+
+    const phase2Steps: OrcStep[] = [
+      { label: "Return authorization created" },
+      { label: "QR return label generated" },
+      { label: "Email with return instructions sent" },
+      { label: "Return window activated (30 days)" },
+      { label: "Awaiting carrier scan" },
+    ]
+
+    addComponent("bot", <OrchestrationCard
+      title="Processing Replacement Order"
+      steps={phase1Steps}
+      onComplete={() => {
+        addMsg("bot", "Your replacement request has been approved. The AI system has placed a replacement order with our fulfillment partner — it will be shipped to the address on file.")
+        addComponent("bot", <OrchestrationCard
+          title="Return Authorization"
+          steps={phase2Steps}
+          onComplete={() => {
+            if (pendingRma) {
+              addComponent("bot", <RMAPanelCard rma={pendingRma} />)
+            } else {
+              addComponent("bot", <ShippingLabelCard customerName={customerName || "Customer"} rmaNumber={rmaNumber} productName={productName} />)
+            }
+            addMsg("bot", "We've emailed you a prepaid return QR code and shipping instructions. Please return the original item within **30 days**. Once the carrier scans the package, your return status updates automatically.\n\nIs there anything else I can help with?")
+            setStep("process-rma")
+          }}
+        />)
+      }}
+    />)
   }
 
   function handleChooseCredit() {
-    addMsg("bot", "No problem! We'll send a SanDisk gift card credit to your email.\n\nPlease enter your **email address**:")
+    addMsg("bot", "No problem! We'll process a refund to your original payment method.\n\nPlease enter your **email address** to receive the refund confirmation:")
     setStep("gift-card-email")
   }
 
   function handleGiftCardEmail(email: string) {
     const v2 = validationResult?.customer_summary?.v2
-    const productName = v2?.product_family || "SanDisk Product"
-    addMsg("bot", `✅ Done! A SanDisk gift card credit has been sent to **${email}**.\n\nYour credit covers the full retail value of your **${productName}** and can be used at any authorized SanDisk retailer online or in-store.\n\nIs there anything else I can help with?`)
-    setStep("process-rma")
+    const sku = (v2?.identified_sku?.full_sku ?? "").toLowerCase()
+    const priceMap: Record<string, number> = {
+      "sdcz71": 14.99, "sdcz550": 29.99, "sdsqua4": 24.99, "sdsquac": 27.99,
+    }
+    const price = Object.entries(priceMap).find(([k]) => sku.includes(k))?.[1] ?? 19.99
+    const isAutoApprove = price < 100
+
+    const autoSteps: OrcStep[] = [
+      { label: "Customer verified" },
+      { label: "Order located in CRM" },
+      { label: "Refund policy validated" },
+      { label: `Purchase price determined: $${price.toFixed(2)}` },
+      { label: "Auto-approval threshold met (< $100)" },
+      { label: "Refund transaction created" },
+      { label: "Payment processor notified" },
+      { label: `Confirmation email sent to ${email}` },
+      { label: "CRM and audit log updated" },
+    ]
+
+    const reviewSteps: OrcStep[] = [
+      { label: "Customer verified" },
+      { label: "Order located in CRM" },
+      { label: `Purchase price determined: $${price.toFixed(2)}` },
+      { label: `Exceeds auto-approval threshold ($100)`, warn: true },
+      { label: "Case package prepared" },
+      { label: "Assigned to Customer Support Specialist" },
+      { label: `Customer notified at ${email}` },
+    ]
+
+    addComponent("bot", <OrchestrationCard
+      title={isAutoApprove ? "Processing Refund" : "Routing for Manual Review"}
+      steps={isAutoApprove ? autoSteps : reviewSteps}
+      onComplete={() => {
+        if (isAutoApprove) {
+          addMsg("bot", `✅ Your refund of **$${price.toFixed(2)}** has been approved automatically and initiated to your original payment method. A confirmation has been sent to **${email}**.\n\nIs there anything else I can help with?`)
+        } else {
+          addMsg("bot", `Your request requires manual review as it exceeds the automatic approval threshold. A specialist has been assigned and will contact you at **${email}** shortly.\n\nIs there anything else I can help with?`)
+        }
+        setStep("process-rma")
+      }}
+    />)
   }
 
   function handleWarrantyCheck() {
