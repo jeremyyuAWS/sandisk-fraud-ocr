@@ -172,6 +172,25 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
       specifications: [],
     },
   },
+  "force_rx2846066 back": {
+    product: "SanDisk Cruzer Force 32GB",
+    sku: "SDCZ71-032G",
+    canAuthenticate: true,
+    classification: {
+      type: "label_serial",
+      chat_message: "Back label captured for **SanDisk Cruzer Force 32GB** — model SDCZ71-032G and serial number identified.",
+      description: "SanDisk Cruzer Force - Back Label",
+      tags: ["usb", "cruzer_force", "32gb", "serial"],
+      extracted_text: ["SanDisk", "Cruzer Force", "32GB", "SDCZ71-032G", "Made in China"],
+      fields: [
+        { label: "Product", value: "SanDisk Cruzer Force" },
+        { label: "SKU", value: "SDCZ71-032G" },
+        { label: "Capacity", value: "32GB" },
+        { label: "Serial Number", value: "BM221257621W" },
+      ],
+      specifications: [],
+    },
+  },
 }
 
 const DEMO_INVOICES: Record<string, DemoInvoice> = {
