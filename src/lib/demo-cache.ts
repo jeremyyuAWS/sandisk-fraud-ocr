@@ -326,7 +326,8 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
     lastDemoProductSku = product.sku
     const prevCount = demoProductUploadCount[product.sku] || 0
     demoProductUploadCount[product.sku] = prevCount + 1
-    const isSecondPhoto = prevCount >= 1
+    // canAuthenticate means serial/model is visible → we already have what we need, skip to invoice
+    const isSecondPhoto = prevCount >= 1 || product.canAuthenticate
     const nextStep: UploadNextStep = isSecondPhoto ? "upload_invoice" : "upload_other_side"
     const chatMessage = isSecondPhoto
       ? `Product details captured. Please upload your invoice or proof of purchase.`
