@@ -1427,7 +1427,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} kind={fileKind} />, timestamp: ocrMarker }])
         setTimeout(scrollToBottom, 50)
         addLog("request", `POST /api/cases/${caseId}/images`, { kind: fileKind, filename: file.name, demo: true })
-        await new Promise((r) => setTimeout(r, fileKind === "pop" ? 18000 + Math.random() * 12000 : 800))
+        await new Promise((r) => setTimeout(r, fileKind === "pop" ? 18000 + Math.random() * 12000 : 6000 + Math.random() * 6000))
         addLog("response", `POST /api/cases/${caseId}/images`, demoResult)
         newFiles.push({ file, kind: fileKind, imageId: demoResult.image_id, previewUrl })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
