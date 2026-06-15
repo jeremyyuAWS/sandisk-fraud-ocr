@@ -58,6 +58,8 @@ type ChatStep =
   | "educate-replacement"
   | "check-invoice"
   | "warranty-decision"
+  | "resolution-choice"
+  | "gift-card-email"
   | "process-rma"
   | "warranty-void"
   | "escalated"
@@ -1188,6 +1190,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [customerEmail, setCustomerEmail] = useState("")
   const [customerContact, setCustomerContact] = useState("")
   const [detailsStep, setDetailsStep] = useState<"name" | "email" | "contact" | "done">("name")
+  const [pendingRma, setPendingRma] = useState<RMADetails | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const logsRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1306,12 +1309,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
             if (v2?.authentic_reference?.matched) {
               addComponent("bot", <AuthenticBadge reference={v2.authentic_reference} />)
             }
-            if (validationResult.rma) {
-              addComponent("bot", <RMAPanelCard rma={validationResult.rma} />)
-              setStep("process-rma")
-            } else {
-              setStep("issue-resolved-ask")
-            }
+            if (validationResult.rma) setPendingRma(validationResult.rma)
+            addMsg("bot", "✅ Your product is verified authentic and your claim is approved!\n\nHow would you like to proceed?\n\n• **Replacement device** — we'll ship you a new unit\n• **Refund / gift card credit** — we'll send a SanDisk gift card to your email")
+            setStep("resolution-choice")
           } else if (decision === "auto_reject") {
             addComponent("bot", <ValidationResultCard summary={validationResult.customer_summary} onGapAction={handleGapAction} />)
             setStep("warranty-void")
@@ -1526,8 +1526,8 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       if (v2?.authentic_reference?.matched) {
         addComponent("bot", <AuthenticBadge reference={v2.authentic_reference} />)
         if (v2.pop_validation?.vendor_authorized && v2.pop_validation?.product_match) {
-          addMsg("bot", "Your product is verified authentic and your invoice is confirmed. You're eligible for a warranty replacement.\n\nWould you like to proceed with a return?")
-          setStep("issue-resolved-ask")
+          addMsg("bot", "✅ Your product is verified authentic and your claim is approved!\n\nHow would you like to proceed?\n\n• **Replacement device** — we'll ship you a new unit\n• **Refund / gift card credit** — we'll send a SanDisk gift card to your email")
+          setStep("resolution-choice")
         } else {
           addMsg("bot", "Your product is verified authentic. Let's move on to troubleshooting.\n\nCan you describe the issue you're experiencing?")
           setStep("troubleshoot")
@@ -1623,6 +1623,17 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       } else {
         handleIssueNotResolved()
       }
+    } else if (step === "resolution-choice") {
+      const lower = text.toLowerCase()
+      if (lower.includes("replac") || lower.includes("ship") || lower.includes("device") || lower.includes("new unit")) {
+        handleChooseReplacement()
+      } else if (lower.includes("refund") || lower.includes("credit") || lower.includes("gift") || lower.includes("card") || lower.includes("email")) {
+        handleChooseCredit()
+      } else {
+        addMsg("bot", "Please choose: **replacement device** or **refund / gift card credit**?")
+      }
+    } else if (step === "gift-card-email") {
+      handleGiftCardEmail(text)
     } else if (step === "troubleshoot") {
       if (caseId) sendMessage(caseId, text, "customer").then((r) => { if (r.ai_reply) addMsg("bot", r.ai_reply) }).catch(() => {})
     } else if (caseId) {
@@ -1692,6 +1703,33 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       addMsg("bot", "I understand the issue isn't resolved. To proceed with a replacement, I'll need to verify your warranty eligibility.\n\nPlease upload your **proof of purchase** (receipt or invoice) so I can check coverage.")
       setStep("check-invoice")
     }
+  }
+
+  function handleChooseReplacement() {
+    const v2 = validationResult?.customer_summary?.v2
+    const productName = v2?.product_family || "SanDisk Product"
+    if (pendingRma) {
+      addComponent("bot", <RMAPanelCard rma={pendingRma} />)
+      addMsg("bot", "Your replacement has been arranged! Check the RMA details above for the return address and packaging instructions.\n\nIs there anything else I can help with?")
+    } else {
+      const rmaNumber = `RMA-${Date.now().toString(36).toUpperCase().slice(-6)}-IN`
+      addMsg("bot", `Great! I'm processing your replacement now.\n\nYour RMA number is **${rmaNumber}**. A prepaid shipping label will be emailed to you shortly.`)
+      addComponent("bot", <ShippingLabelCard customerName={customerName || "Customer"} rmaNumber={rmaNumber} productName={productName} />)
+      addMsg("bot", "Once we receive your product, a replacement will be shipped within **7 business days**.\n\nIs there anything else I can help with?")
+    }
+    setStep("process-rma")
+  }
+
+  function handleChooseCredit() {
+    addMsg("bot", "No problem! We'll send a SanDisk gift card credit to your email.\n\nPlease enter your **email address**:")
+    setStep("gift-card-email")
+  }
+
+  function handleGiftCardEmail(email: string) {
+    const v2 = validationResult?.customer_summary?.v2
+    const productName = v2?.product_family || "SanDisk Product"
+    addMsg("bot", `✅ Done! A SanDisk gift card credit has been sent to **${email}**.\n\nYour credit covers the full retail value of your **${productName}** and can be used at any authorized SanDisk retailer online or in-store.\n\nIs there anything else I can help with?`)
+    setStep("process-rma")
   }
 
   function handleWarrantyCheck() {
@@ -2004,6 +2042,13 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           <div className="flex flex-wrap gap-2">
             <QuickChip label="Yes, resolved" onClick={handleIssueResolved} />
             <QuickChip label="No, need replacement" onClick={handleIssueNotResolved} />
+          </div>
+        )}
+
+        {step === "resolution-choice" && (
+          <div className="flex flex-wrap gap-2">
+            <QuickChip label="Replacement device" onClick={handleChooseReplacement} />
+            <QuickChip label="Refund / gift card credit" onClick={handleChooseCredit} />
           </div>
         )}
 
