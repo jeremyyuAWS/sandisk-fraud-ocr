@@ -1175,6 +1175,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [step, setStep] = useState<ChatStep>("welcome")
   const [expanded, setExpanded] = useState(false)
   const [caseId, setCaseId] = useState<string | null>(null)
+  const [isProcessingUpload, setIsProcessingUpload] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>>([])
   const [validationResult, setValidationResult] = useState<ValidateResponse | null>(null)
   const [lightbox, setLightbox] = useState<{ url: string; classification?: Classification } | null>(null)
@@ -1331,6 +1332,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || !caseId) return
+    setIsProcessingUpload(true)
 
     const fileList = Array.from(files)
     const kind = (step === "upload-invoice" || step === "check-invoice") ? "pop" : "product"
@@ -1376,6 +1378,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         const allFiles = [...uploadedFiles, ...newFiles]
         setUploadedFiles(allFiles)
         applyNextStep(demoBulk.next_step, undefined, allFiles)
+        setIsProcessingUpload(false)
         if (fileInputRef.current) fileInputRef.current.value = ""
         return
       }
@@ -1406,6 +1409,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         addMsg("bot", "Failed to upload files. Please try again.")
         setStep("upload-product")
       }
+      setIsProcessingUpload(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
       return
     }
@@ -1441,6 +1445,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           applyNextStep(demoResult.next_step, undefined, allFiles, demoResult.validation_result)
         }
         setTimeout(scrollToBottom, 150)
+        setIsProcessingUpload(false)
         if (fileInputRef.current) fileInputRef.current.value = ""
         return
       }
@@ -1486,6 +1491,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         addMsg("bot", `Failed to upload ${file.name}. Please try again.`)
       }
     }
+    setIsProcessingUpload(false)
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
@@ -1875,7 +1881,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           </div>
         )}
 
-        {(step === "upload-product" || step === "upload-back") && (
+        {(step === "upload-product" || step === "upload-back") && !isProcessingUpload && (
           <div className="space-y-2">
             <div className="flex gap-2">
               <Button
@@ -1899,7 +1905,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           </div>
         )}
 
-        {step === "upload-invoice" && (
+        {step === "upload-invoice" && !isProcessingUpload && (
           <div className="space-y-2">
             <div className="flex gap-2">
               <Button
@@ -2001,7 +2007,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           </div>
         )}
 
-        {step === "check-invoice" && (
+        {step === "check-invoice" && !isProcessingUpload && (
           <div className="flex gap-2">
             <Button
               variant="outline"
