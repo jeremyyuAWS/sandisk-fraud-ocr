@@ -1821,6 +1821,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     const v2 = validationResult?.customer_summary?.v2
     const sku = (v2?.identified_sku?.full_sku ?? "").toLowerCase()
     const priceMap: Record<string, number> = {
+      "sdssde61": 169.99, "sdssde80": 199.99,
       "sdcz71": 14.99, "sdcz550": 29.99, "sdsqua4": 24.99, "sdsquac": 27.99,
     }
     const price = Object.entries(priceMap).find(([k]) => sku.includes(k))?.[1] ?? 19.99
