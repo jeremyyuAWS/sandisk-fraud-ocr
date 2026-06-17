@@ -62,6 +62,7 @@ type ChatStep =
   | "gift-card-email"
   | "process-rma"
   | "warranty-void"
+  | "counterfeit"
   | "escalated"
   | "closed"
 
@@ -1226,6 +1227,66 @@ function AuthenticBadge({ reference }: { reference: AuthenticReference }) {
 }
 
 // ---------------------------------------------------------------------------
+// Counterfeit Alert Card
+// ---------------------------------------------------------------------------
+
+function CounterfeitAlertCard() {
+  const tells = [
+    { label: "Serial number", detail: "Absent — back label is blank, no S/N or batch code found" },
+    { label: "Security hologram", detail: "Missing — SanDisk authenticity hologram not present" },
+    { label: "FCC / CE markings", detail: "Not found on back label or body" },
+    { label: "USB connector", detail: "Housing dimensions and finish inconsistent with genuine SDCZ460 units" },
+    { label: "Branding font weight", detail: "Deviation detected — letterform spacing outside tolerance" },
+  ]
+  return (
+    <Card className="border-2 border-red-400 bg-red-50/60">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-red-600 shrink-0" />
+            <span className="text-base font-semibold text-red-800">Counterfeit Product Detected</span>
+          </div>
+          <Badge variant="outline" className="text-xs font-bold bg-red-100 text-red-700 border-red-300">
+            High Risk
+          </Badge>
+        </div>
+
+        <Separator className="bg-red-200" />
+
+        <p className="text-sm text-red-700">
+          AI analysis of the uploaded images could not verify this as a genuine SanDisk product.
+          Multiple authenticity markers are absent or inconsistent.
+        </p>
+
+        <Separator className="bg-red-200" />
+
+        <div className="text-xs font-semibold text-red-800 uppercase tracking-wider mb-1">
+          Counterfeit Indicators Found
+        </div>
+        <div className="space-y-2">
+          {tells.map((t, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <TriangleAlert className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium text-red-800">{t.label}</span>
+                <p className="text-xs text-red-600 mt-0.5">{t.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <Separator className="bg-red-200" />
+
+        <div className="rounded-md bg-red-100 border border-red-300 px-3 py-2 text-xs text-red-700 space-y-1">
+          <div className="font-semibold">What this means:</div>
+          <div>Warranty and return claims cannot be processed for counterfeit products. Selling or distributing counterfeit goods may violate consumer protection laws.</div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main ChatModal
 // ---------------------------------------------------------------------------
 
@@ -1356,6 +1417,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       case "validate":
         handleRunValidation(allFiles)
         break
+      case "counterfeit_detected":
+        handleCounterfeitDetected()
+        break
       case "complete":
         if (validationResult) {
           setValidationResult(validationResult)
@@ -1384,6 +1448,12 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         setStep("upload-preview")
         break
     }
+  }
+
+  function handleCounterfeitDetected() {
+    addComponent("bot", <CounterfeitAlertCard />)
+    addMsg("bot", "⚠️ Our AI system has flagged this device as a **counterfeit SanDisk product**. The back label is blank — genuine SanDisk units always carry a serial number, security hologram, and FCC/CE certification marks.\n\nWe are unable to process a warranty or return claim for this item.\n\nWould you like to speak to a specialist, or report this as a counterfeit product?")
+    setStep("counterfeit")
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -2180,6 +2250,17 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
           <div className="flex flex-wrap gap-2">
             <QuickChip label="Replacement device" onClick={handleChooseReplacement} />
             <QuickChip label="Refund / gift card credit" onClick={handleChooseCredit} />
+          </div>
+        )}
+
+        {step === "counterfeit" && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1 border-red-300 text-red-700 hover:bg-red-50" onClick={handleEscalate}>
+              Speak to a Specialist
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleReset}>
+              New Case
+            </Button>
           </div>
         )}
 

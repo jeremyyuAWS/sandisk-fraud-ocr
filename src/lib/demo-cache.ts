@@ -8,6 +8,8 @@ interface DemoProduct {
   sku: string
   canAuthenticate: boolean
   classification: Classification
+  nextStepOverride?: string   // bypass computed next_step
+  isCounterfeit?: boolean     // back image triggers counterfeit result
 }
 
 interface DemoInvoice {
@@ -234,6 +236,70 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
       specifications: [],
     },
   },
+
+  // ── Counterfeit scenario (3-image flow) ──────────────────────────────────
+  // Image 1: Damaged side — notes damage, asks for front
+  "fake sandisk damage": {
+    product: "SanDisk Ultra Dual Drive USB Type-C 128GB",
+    sku: "SDCZ460-128G",
+    canAuthenticate: false,
+    nextStepOverride: "upload_other_side",
+    classification: {
+      type: "product_image",
+      chat_message: "Physical damage detected on the USB connector housing — the plastic casing is cracked and the connector tip shows deformation. To continue the assessment, please upload a **photo of the front face** of the device showing the branding and label.",
+      description: "SanDisk USB Drive - Damaged Side View",
+      tags: ["usb", "damage", "cracked", "connector"],
+      extracted_text: [],
+      fields: [
+        { label: "Damage Type", value: "Cracked connector housing" },
+        { label: "Severity", value: "High — structural damage to USB tip" },
+      ],
+      specifications: [],
+    },
+  },
+
+  // Image 2: Front with SanDisk branding — identifies product, asks for back
+  "fake sandisk front": {
+    product: "SanDisk Ultra Dual Drive USB Type-C 128GB",
+    sku: "SDCZ460-128G",
+    canAuthenticate: false,
+    nextStepOverride: "upload_other_side",
+    classification: {
+      type: "product_image",
+      chat_message: "Front captured: **SanDisk Ultra Dual Drive USB Type-C 128GB** (SDCZ460-128G) identified from branding markings.\n\nTo verify authenticity we need to check the back label for serial number, security hologram, and FCC/CE certification marks. Please upload a **photo of the back of the device**.",
+      description: "SanDisk Ultra Dual Drive USB Type-C - Front",
+      tags: ["usb", "type-c", "dual-drive", "128gb"],
+      extracted_text: ["SanDisk", "Type-C", "128GB"],
+      fields: [
+        { label: "Product", value: "SanDisk Ultra Dual Drive USB Type-C" },
+        { label: "Capacity", value: "128GB" },
+        { label: "SKU", value: "SDCZ460-128G" },
+        { label: "Interface", value: "USB Type-C + USB-A" },
+      ],
+      specifications: [
+        { label: "Read Speed", value: "Up to 150 MB/s" },
+        { label: "Interface", value: "USB 3.1 Gen 1" },
+      ],
+    },
+  },
+
+  // Image 3: Back with no identifiers — triggers counterfeit detection
+  "fake sandisk back": {
+    product: "SanDisk Ultra Dual Drive USB Type-C 128GB",
+    sku: "SDCZ460-128G",
+    canAuthenticate: false,
+    isCounterfeit: true,
+    nextStepOverride: "counterfeit_detected",
+    classification: {
+      type: "label_serial",
+      chat_message: "Back label scan complete.",
+      description: "SanDisk USB Drive - Back (No Identifiers)",
+      tags: ["usb", "back", "no_serial", "counterfeit"],
+      extracted_text: [],
+      fields: [],
+      specifications: [],
+    },
+  },
 }
 
 const DEMO_INVOICES: Record<string, DemoInvoice> = {
@@ -396,14 +462,37 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
   const product = findDemoProduct(filename)
   if (product) {
     lastDemoProductSku = product.sku
+
+    // Counterfeit back image: return a special counterfeit_detected response
+    if (product.isCounterfeit) {
+      return {
+        image_id: `demo-img-${++demoImageCounter}`,
+        kind: kind || "product",
+        filename,
+        classification: product.classification,
+        next_step: "counterfeit_detected" as UploadNextStep,
+        suggested_prompt: "counterfeit_detected",
+      }
+    }
+
     const prevCount = demoProductUploadCount[product.sku] || 0
     demoProductUploadCount[product.sku] = prevCount + 1
-    // canAuthenticate means serial/model is visible → we already have what we need, skip to invoice
-    const isSecondPhoto = prevCount >= 1 || product.canAuthenticate
-    const nextStep: UploadNextStep = isSecondPhoto ? "upload_invoice" : "upload_other_side"
-    const chatMessage = isSecondPhoto
-      ? `Product details captured. Please upload your invoice or proof of purchase.`
-      : `Got the front — could you also upload a photo of the back of the device? The back label has the serial and batch code we need to log the claim.`
+
+    // nextStepOverride lets individual entries control the next step regardless of count
+    let nextStep: UploadNextStep
+    let chatMessage: string
+    if (product.nextStepOverride) {
+      nextStep = product.nextStepOverride as UploadNextStep
+      chatMessage = product.classification.chat_message
+    } else {
+      // canAuthenticate means serial/model is visible → we already have what we need, skip to invoice
+      const isSecondPhoto = prevCount >= 1 || product.canAuthenticate
+      nextStep = isSecondPhoto ? "upload_invoice" : "upload_other_side"
+      chatMessage = isSecondPhoto
+        ? `Product details captured. Please upload your invoice or proof of purchase.`
+        : `Got the front — could you also upload a photo of the back of the device? The back label has the serial and batch code we need to log the claim.`
+    }
+
     return {
       image_id: `demo-img-${++demoImageCounter}`,
       kind: kind || "product",

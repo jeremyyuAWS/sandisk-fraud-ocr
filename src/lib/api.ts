@@ -47,7 +47,7 @@ export interface Classification {
   specifications: ClassificationField[]
 }
 
-export type UploadNextStep = "upload_other_side" | "upload_invoice" | "validate" | "complete"
+export type UploadNextStep = "upload_other_side" | "upload_invoice" | "validate" | "complete" | "counterfeit_detected"
 
 export interface UploadImageResponse {
   image_id: string
