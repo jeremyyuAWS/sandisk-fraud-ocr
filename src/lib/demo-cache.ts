@@ -157,6 +157,27 @@ const DEMO_PRODUCTS: Record<string, DemoProduct> = {
       ],
     },
   },
+  // Matches "Force_RX2846066 front.jpeg" — the actual training-file front photo
+  "force_rx2846066 front": {
+    product: "SanDisk Cruzer Force 32GB",
+    sku: "SDCZ71-032G",
+    canAuthenticate: false,
+    classification: {
+      type: "product_image",
+      chat_message: "Product identified: **SanDisk Cruzer Force 32GB** (SDCZ71-032G). Front view captured — SanDisk branding confirmed.",
+      description: "SanDisk Cruzer Force - Front",
+      tags: ["usb", "cruzer_force", "32gb"],
+      extracted_text: ["SanDisk", "Cruzer Force"],
+      fields: [
+        { label: "Product", value: "SanDisk Cruzer Force" },
+        { label: "Capacity", value: "32GB" },
+        { label: "SKU", value: "SDCZ71-032G" },
+      ],
+      specifications: [
+        { label: "Interface", value: "USB 2.0" },
+      ],
+    },
+  },
   "force_rx2846066 snap2": {
     product: "SanDisk Cruzer Force 32GB",
     sku: "SDCZ71-032G",
