@@ -373,8 +373,13 @@ function findDemoInvoice(filename: string): DemoInvoice | null {
   return null
 }
 
-export function isDemoFile(filename: string): boolean {
-  return findDemoProduct(filename) !== null || findDemoInvoice(filename) !== null
+export function isDemoFile(filename: string, kind?: string): boolean {
+  if (findDemoProduct(filename) !== null || findDemoInvoice(filename) !== null) return true
+  // Any pop upload works when we already know the product SKU from this session
+  if (kind === "pop" && lastDemoProductSku) {
+    return Object.values(DEMO_INVOICES).some(inv => inv.matchesSku === lastDemoProductSku)
+  }
+  return false
 }
 
 let demoImageCounter = 0
@@ -409,7 +414,12 @@ export function getDemoUploadResponse(filename: string, kind: string): UploadIma
     }
   }
 
-  const invoice = findDemoInvoice(filename)
+  // For invoice uploads: match by filename first, then fall back to the last
+  // identified product SKU so any PDF uploaded during the invoice step works.
+  let invoice = findDemoInvoice(filename)
+  if (!invoice && kind === "pop" && lastDemoProductSku) {
+    invoice = Object.values(DEMO_INVOICES).find(inv => inv.matchesSku === lastDemoProductSku) ?? null
+  }
   if (invoice) {
     const matchedProduct = Object.values(DEMO_PRODUCTS).find(p => p.sku === invoice.matchesSku)
     const productName = matchedProduct?.product || "SanDisk Product"
