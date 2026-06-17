@@ -25,7 +25,7 @@ import {
   type AuthenticReference,
   type RMADetails,
 } from "@/lib/api"
-import { getDemoUploadResponse, getDemoBulkUploadResponse, getDemoValidateResponse, resetDemoState } from "@/lib/demo-cache"
+import { getDemoUploadResponse, getDemoBulkUploadResponse, getDemoValidateResponse, resetDemoState, resolveDemoKey } from "@/lib/demo-cache"
 
 // ---------------------------------------------------------------------------
 // Session log entry type
@@ -1547,8 +1547,9 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
       const isImage = file.type.startsWith("image/")
       const previewUrl = isImage ? URL.createObjectURL(file) : undefined
 
-      // Check demo cache
-      const demoResult = getDemoUploadResponse(file.name, fileKind)
+      // Resolve demo key by SHA-256 hash so any filename works for demo files
+      const demoKey = await resolveDemoKey(file)
+      const demoResult = getDemoUploadResponse(demoKey, fileKind)
       if (demoResult) {
         const ocrMarker = `__ocr_processing_${Date.now()}`
         setMessages((prev) => [...prev, { from: "bot" as const, component: <OcrProcessingCard filename={file.name} kind={fileKind} />, timestamp: ocrMarker }])

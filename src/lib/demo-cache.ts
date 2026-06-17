@@ -438,6 +438,36 @@ const DEMO_INVOICES: Record<string, DemoInvoice> = {
   },
 }
 
+// ---------------------------------------------------------------------------
+// Hash-based matching — maps SHA-256(file bytes) → demo cache key.
+// This lets demo files have any filename without revealing the trick.
+// ---------------------------------------------------------------------------
+
+const DEMO_FILE_HASHES: Record<string, string> = {
+  "8616ba1662545ff89016a08c88bb9e94910d3f1fd11cd2303a45d53503893820": "force_rx2846066 front",   // Force_RX2846066 front.jpeg
+  "b1c02572bcd543dadb3fe8d16d31ad35c28c215a00ca5bd72077d592d7e24b94": "force_rx2846066 back",    // Force_RX2846066 back.jpeg
+  "d61e653d7daa5a73be409d5f2534ff4e0facd94afee29030c8a062e29fd361db": "invoice_sdcz71-032g",     // Invoice_SDCZ71-032G.pdf
+  "110a0e1b99dc3bc9b9749752ce743574ced6a9ec57e173a1076e3bc487e1ea1e": "front-sandisk-extreme-pro", // front-sandisk-extreme-pro.jpg
+  "e204c255cfe3f4e4b044c4ccfeb35c55c9806d9dd91abc4fdcd389d47d4fee66": "back-sandisk-extreme-pro",  // back-sandisk-extreme-pro.jpg
+  "14e38106eb77afb7c110b9d0234de87fedfb7f1ac73243db740b50185bb02446": "invoice_sdssde61-1t00",    // Invoice-SDSSDE61-1T00.pdf
+  "76d25d5e238e9bdcfd92ba4e819114a7d586424f25396e7a450b511940083d73": "fake sandisk damage",      // 1-physical damage sandisk.jpeg
+  "e6ef0154c6945398347d66cd7299ab5f9ae23ba7507d32c91c014e48161f270e": "fake sandisk front",       // 2-251231-000251_front.jpg
+  "6ef96a19b4b4b3e78018c52d605948a189e62d950ba7bf8cc280c71dd52a2b91": "fake sandisk back",        // 3-251231-000251_ back.jpg
+}
+
+// Returns the demo cache key for a file based on its SHA-256 hash.
+// Falls back to the original filename so all existing filename-based paths still work.
+export async function resolveDemoKey(file: File): Promise<string> {
+  try {
+    const buffer = await file.arrayBuffer()
+    const hashBuffer = await crypto.subtle.digest("SHA-256", buffer)
+    const hex = Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("")
+    return DEMO_FILE_HASHES[hex] ?? file.name
+  } catch {
+    return file.name
+  }
+}
+
 function normalizeFilename(name: string): string {
   return name.toLowerCase().replace(/\.[^.]+$/, "").replace(/[_\-\s]+/g, " ").trim()
 }
