@@ -455,7 +455,11 @@ function InvoiceExtractionCard({ classification, onImageClick, previewUrl, previ
   const { pageUrl: pdfPageUrl, failed: pdfFailed } = usePdfFirstPage(previewUrl, isPdf)
   const displayUrl = isPdf ? pdfPageUrl : previewUrl
 
-  const invoiceNo = fields.find(f => f.label.toLowerCase().includes("invoice"))?.value
+  // Labels are free text from the extractor, and several of them mention the
+  // invoice without being its number — "Brand on invoice", "Model SKU on
+  // invoice". A bare includes("invoice") matched those first and showed e.g.
+  // the brand under "Invoice No.", so require an actual number-ish qualifier.
+  const invoiceNo = fields.find(f => /\binv(?:oice)?\.?\s*(?:no\b|no\.|num\b|number\b|#)/.test(f.label.toLowerCase()))?.value
   const invoiceDate = fields.find(f => f.label.toLowerCase().includes("date"))?.value
   const seller = fields.find(f => f.label.toLowerCase().includes("sold") || f.label.toLowerCase().includes("seller"))?.value
   const gstin = fields.find(f => f.label.toLowerCase().includes("gstin"))?.value
