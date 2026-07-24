@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText, ZoomIn, ZoomOut, RotateCcw, WifiOff, RefreshCw, Send } from "lucide-react"
+import { X, Minus, Paperclip, Loader as Loader2, Maximize2, Minimize2, Headset, ShieldCheck, ShieldAlert, ShieldQuestionMark as ShieldQuestion, CircleCheck, TriangleAlert, Clock, ScanSearch, FileText, Package, Receipt, ChevronDown, ChevronUp, ScrollText, ZoomIn, ZoomOut, RotateCcw, WifiOff, RefreshCw, Send, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -151,7 +151,10 @@ function MessageBubble({ msg, expanded }: { msg: ChatMessage; expanded: boolean 
   return (
     <div className="flex items-start gap-2">
       <BotAvatar />
-      <div className="flex flex-col gap-1 min-w-0">
+      {/* Card messages need a definite width, not shrink-to-fit: cards inside
+          use container queries, and `container-type: inline-size` stops content
+          from driving the width (it would collapse). Text bubbles keep hugging. */}
+      <div className={`flex flex-col gap-1 min-w-0 ${isComponent ? "flex-1" : ""}`}>
         <div
           className={`${expanded ? "max-w-full w-full" : "max-w-[85%]"} ${
             isComponent
@@ -378,13 +381,79 @@ function formatGapAction(action: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Upload previews
+// ---------------------------------------------------------------------------
+
+// Invoices are often PDFs, not photos. Object URLs work for both.
+function makePreviewUrl(file: File): string | undefined {
+  return file.type.startsWith("image/") || file.type === "application/pdf"
+    ? URL.createObjectURL(file)
+    : undefined
+}
+
+// pdf.js is ~400KB + a ~1.2MB worker, and most cases never upload a PDF — so
+// load it on first use rather than in the main bundle. One shared worker.
+let pdfjsPromise: Promise<typeof import("pdfjs-dist")> | null = null
+function loadPdfjs() {
+  if (!pdfjsPromise) {
+    pdfjsPromise = (async () => {
+      const lib = await import("pdfjs-dist")
+      const { default: PdfjsWorker } = await import("pdfjs-dist/build/pdf.worker.mjs?worker")
+      lib.GlobalWorkerOptions.workerPort = new PdfjsWorker()
+      return lib
+    })()
+  }
+  return pdfjsPromise
+}
+
+// Rasterise page 1 of a PDF to a PNG data URL. We deliberately don't embed the
+// PDF via <object>: that depends on the browser having a built-in PDF viewer,
+// and degrades to a blank box where there isn't one. Rendering it ourselves
+// also means a PDF invoice becomes an ordinary image — so the existing
+// <img>-based lightbox works on it for free.
+function usePdfFirstPage(url: string | undefined, enabled: boolean) {
+  const [pageUrl, setPageUrl] = useState<string>()
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!url || !enabled) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const pdfjsLib = await loadPdfjs()
+        const pdf = await pdfjsLib.getDocument({ url }).promise
+        const page = await pdf.getPage(1)
+        // scale 2 keeps it legible when opened full-size in the lightbox
+        const viewport = page.getViewport({ scale: 2 })
+        const canvas = document.createElement("canvas")
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        // v6 takes `canvas` directly; `canvasContext` is deprecated.
+        await page.render({ canvas, viewport }).promise
+        if (!cancelled) setPageUrl(canvas.toDataURL("image/png"))
+      } catch {
+        if (!cancelled) setFailed(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [url, enabled])
+
+  return { pageUrl, failed }
+}
+
+// ---------------------------------------------------------------------------
 // Invoice Extraction Card (rich layout for invoices)
 // ---------------------------------------------------------------------------
 
-function InvoiceExtractionCard({ classification, onImageClick, previewUrl }: { classification: Classification; onImageClick?: (url: string, classification: Classification) => void; previewUrl?: string }) {
+function InvoiceExtractionCard({ classification, onImageClick, previewUrl, previewMime }: { classification: Classification; onImageClick?: (url: string, classification: Classification) => void; previewUrl?: string; previewMime?: string }) {
   const [rawOpen, setRawOpen] = useState(false)
   const fields = classification.fields ?? []
   const specs = classification.specifications ?? []
+
+  // A PDF invoice is rasterised to page 1 so it displays (and enlarges) like a photo.
+  const isPdf = previewMime === "application/pdf"
+  const { pageUrl: pdfPageUrl, failed: pdfFailed } = usePdfFirstPage(previewUrl, isPdf)
+  const displayUrl = isPdf ? pdfPageUrl : previewUrl
 
   const invoiceNo = fields.find(f => f.label.toLowerCase().includes("invoice"))?.value
   const invoiceDate = fields.find(f => f.label.toLowerCase().includes("date"))?.value
@@ -401,7 +470,7 @@ function InvoiceExtractionCard({ classification, onImageClick, previewUrl }: { c
 
   return (
     <Card className="border border-border">
-      <CardContent className="p-4 space-y-3">
+      <CardContent className="@container p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Receipt className="h-4 w-4 text-muted-foreground" />
@@ -418,106 +487,154 @@ function InvoiceExtractionCard({ classification, onImageClick, previewUrl }: { c
 
         <Separator />
 
-        <div className="grid grid-cols-2 gap-3">
-          {invoiceNo && (
-            <div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice No.</div>
-              <div className="text-xs font-medium text-foreground mt-0.5 font-mono">{invoiceNo}</div>
-            </div>
-          )}
-          {invoiceDate && (
-            <div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Date</div>
-              <div className="text-xs font-medium text-foreground mt-0.5">{invoiceDate}</div>
-            </div>
-          )}
-          {total && (
-            <div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Total</div>
-              <div className="text-xs font-semibold text-foreground mt-0.5">{total}</div>
-            </div>
-          )}
-          {hsn && (
-            <div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">HSN Code</div>
-              <div className="text-xs font-medium text-foreground mt-0.5 font-mono">{hsn}</div>
-            </div>
-          )}
-        </div>
-
-        {(seller || gstin) && (
-          <>
-            <Separator />
-            <div className="space-y-1">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Seller</div>
-              {seller && <div className="text-xs font-medium text-foreground">{seller}</div>}
-              {gstin && <div className="text-[11px] text-muted-foreground font-mono">GSTIN: {gstin}</div>}
-            </div>
-          </>
-        )}
-
-        {buyer && (
-          <>
-            <Separator />
-            <div className="space-y-1">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Buyer</div>
-              <div className="text-xs font-medium text-foreground">{buyer}</div>
-            </div>
-          </>
-        )}
-
-        {product && (
-          <>
-            <Separator />
-            <div className="space-y-1">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Product</div>
-              <div className="text-xs font-medium text-foreground">{product}</div>
-            </div>
-          </>
-        )}
-
-        {otherFields.length > 0 && (
-          <>
-            <Separator />
-            <div className="grid grid-cols-[100px_1fr] gap-y-1">
-              {otherFields.map((f, i) => (
-                <div key={i} className="contents">
-                  <span className="text-[11px] text-muted-foreground">{f.label}</span>
-                  <span className="text-[11px] font-medium text-foreground">{f.value}</span>
+        {/* Invoice image beside what was read off it. Stacks when the panel is
+            narrow; side-by-side once the card has room (container query, so it
+            follows the chat panel's width, not the viewport's). */}
+        <div className="flex flex-col @2xs:flex-row @2xs:items-start gap-4">
+          {previewUrl && (
+            <div className="shrink-0 self-start w-full @2xs:w-[120px] @lg:w-[210px]">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+                Uploaded invoice
+              </div>
+              {displayUrl ? (
+                <button
+                  type="button"
+                  onClick={() => onImageClick?.(displayUrl, classification)}
+                  title="Click to enlarge"
+                  className="cursor-pointer hover:opacity-80 transition-opacity w-full"
+                >
+                  {/* object-contain, not cover: a cropped invoice is unverifiable. */}
+                  <img
+                    src={displayUrl}
+                    alt="Uploaded invoice"
+                    className="w-full max-h-[300px] object-contain rounded-md border border-border bg-muted/30"
+                  />
+                </button>
+              ) : pdfFailed ? (
+                // Couldn't rasterise it — say so plainly and hand over the file.
+                <a
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex flex-col items-center justify-center gap-1 h-[140px] rounded-md border border-border bg-muted/30 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <FileText className="h-5 w-5" />
+                  <span className="text-[11px]">PDF invoice</span>
+                  <span className="inline-flex items-center gap-1 text-[11px]">
+                    Open <ExternalLink className="h-3 w-3" />
+                  </span>
+                </a>
+              ) : (
+                <div className="flex items-center justify-center h-[140px] rounded-md border border-border bg-muted/30">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
-              ))}
+              )}
             </div>
-          </>
-        )}
+          )}
 
-        {classification.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {classification.tags.map((tag, i) => (
-              <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 font-normal">
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        )}
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="grid grid-cols-1 @md:grid-cols-2 gap-3">
+              {invoiceNo && (
+                <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Invoice No.</div>
+                  <div className="text-xs font-medium text-foreground mt-0.5 font-mono break-all">{invoiceNo}</div>
+                </div>
+              )}
+              {invoiceDate && (
+                <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Date</div>
+                  <div className="text-xs font-medium text-foreground mt-0.5">{invoiceDate}</div>
+                </div>
+              )}
+              {total && (
+                <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Total</div>
+                  <div className="text-xs font-semibold text-foreground mt-0.5">{total}</div>
+                </div>
+              )}
+              {hsn && (
+                <div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">HSN Code</div>
+                  <div className="text-xs font-medium text-foreground mt-0.5 font-mono break-all">{hsn}</div>
+                </div>
+              )}
+            </div>
 
-        {classification.extracted_text.length > 0 && (
-          <>
-            <button
-              onClick={() => setRawOpen(!rawOpen)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              {rawOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-              {rawOpen ? "Hide raw OCR text" : "Show raw OCR text"}
-            </button>
-            {rawOpen && (
-              <div className="text-xs text-muted-foreground space-y-0.5 font-mono bg-muted/50 rounded-md p-2 max-h-[120px] overflow-y-auto">
-                {classification.extracted_text.map((t, i) => (
-                  <div key={i}>{t}</div>
+            {(seller || gstin) && (
+              <>
+                <Separator />
+                <div className="space-y-1">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Seller</div>
+                  {seller && <div className="text-xs font-medium text-foreground">{seller}</div>}
+                  {gstin && <div className="text-[11px] text-muted-foreground font-mono break-all">GSTIN: {gstin}</div>}
+                </div>
+              </>
+            )}
+
+            {buyer && (
+              <>
+                <Separator />
+                <div className="space-y-1">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Buyer</div>
+                  <div className="text-xs font-medium text-foreground">{buyer}</div>
+                </div>
+              </>
+            )}
+
+            {product && (
+              <>
+                <Separator />
+                <div className="space-y-1">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Product</div>
+                  <div className="text-xs font-medium text-foreground">{product}</div>
+                </div>
+              </>
+            )}
+
+            {otherFields.length > 0 && (
+              <>
+                <Separator />
+                <div className="grid grid-cols-[100px_1fr] gap-y-1">
+                  {otherFields.map((f, i) => (
+                    <div key={i} className="contents">
+                      <span className="text-[11px] text-muted-foreground">{f.label}</span>
+                      <span className="text-[11px] font-medium text-foreground break-words">{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {classification.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {classification.tags.map((tag, i) => (
+                  <Badge key={i} variant="outline" className="text-[10px] py-0.5 px-2 font-normal">
+                    {tag}
+                  </Badge>
                 ))}
               </div>
             )}
-          </>
-        )}
+
+            {classification.extracted_text.length > 0 && (
+              <>
+                <button
+                  onClick={() => setRawOpen(!rawOpen)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  {rawOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {rawOpen ? "Hide raw OCR text" : "Show raw OCR text"}
+                </button>
+                {rawOpen && (
+                  <div className="text-xs text-muted-foreground space-y-0.5 font-mono bg-muted/50 rounded-md p-2 max-h-[120px] overflow-y-auto">
+                    {classification.extracted_text.map((t, i) => (
+                      <div key={i}>{t}</div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   )
@@ -527,7 +644,7 @@ function InvoiceExtractionCard({ classification, onImageClick, previewUrl }: { c
 // Classification card (shown after upload)
 // ---------------------------------------------------------------------------
 
-function ClassificationCard({ classification, previewUrl, onImageClick }: { classification: Classification; previewUrl?: string; onImageClick?: (url: string, classification: Classification) => void }) {
+function ClassificationCard({ classification, previewUrl, previewMime, onImageClick }: { classification: Classification; previewUrl?: string; previewMime?: string; onImageClick?: (url: string, classification: Classification) => void }) {
   const [specsExpanded, setSpecsExpanded] = useState(false)
   const [rawOpen, setRawOpen] = useState(false)
   const isInvoice = classification.type === "invoice" || classification.type === "transcript"
@@ -537,7 +654,7 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
 
   // Use the dedicated invoice card for invoices with rich data
   if (isInvoice && classification.fields.length > 0) {
-    return <InvoiceExtractionCard classification={classification} onImageClick={onImageClick} previewUrl={previewUrl} />
+    return <InvoiceExtractionCard classification={classification} onImageClick={onImageClick} previewUrl={previewUrl} previewMime={previewMime} />
   }
 
   // Default layout for product/label/packaging images
@@ -549,7 +666,7 @@ function ClassificationCard({ classification, previewUrl, onImageClick }: { clas
           <div className="text-sm text-foreground leading-relaxed"><MarkdownMessage content={classification.description} /></div>
         </div>
 
-        {previewUrl && (
+        {previewUrl && previewMime !== "application/pdf" && (
           <button
             onClick={() => onImageClick?.(previewUrl, classification)}
             className="cursor-pointer hover:opacity-80 transition-opacity"
@@ -1296,7 +1413,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
   const [expanded, setExpanded] = useState(false)
   const [caseId, setCaseId] = useState<string | null>(null)
   const [isProcessingUpload, setIsProcessingUpload] = useState(false)
-  const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>>([])
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ file: File; kind: string; imageId?: string; previewUrl?: string; previewMime?: string }>>([])
   const [validationResult, setValidationResult] = useState<ValidateResponse | null>(null)
   const [lightbox, setLightbox] = useState<{ url: string; classification?: Classification } | null>(null)
   const [activeTab, setActiveTab] = useState<"chat" | "logs">("chat")
@@ -1406,7 +1523,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     }
   }
 
-  function applyNextStep(nextStep: UploadNextStep | undefined, _unused: string | undefined, allFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }>, validationResult?: ValidateResponse) {
+  function applyNextStep(nextStep: UploadNextStep | undefined, _unused: string | undefined, allFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string; previewMime?: string }>, validationResult?: ValidateResponse) {
     switch (nextStep) {
       case "upload_other_side":
         setStep("upload-back")
@@ -1463,12 +1580,12 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
 
     const fileList = Array.from(files)
     const kind = (step === "upload-invoice" || step === "check-invoice") ? "pop" : "product"
-    const newFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string }> = []
+    const newFiles: Array<{ file: File; kind: string; imageId?: string; previewUrl?: string; previewMime?: string }> = []
 
     // Show previews for all files
     for (const file of fileList) {
       const isImage = file.type.startsWith("image/")
-      const previewUrl = isImage ? URL.createObjectURL(file) : undefined
+      const previewUrl = makePreviewUrl(file)
       if (isImage && previewUrl) {
         addComponent("user", (
           <ClickableImagePreview url={previewUrl} filename={file.name} onClick={(url) => setLightbox({ url })} />
@@ -1495,10 +1612,10 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         for (let i = 0; i < demoBulk.uploads.length; i++) {
           const upload = demoBulk.uploads[i]
           const file = fileList[i]
-          const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
-          newFiles.push({ file, kind, imageId: upload.image_id, previewUrl })
+          const previewUrl = makePreviewUrl(file)
+          newFiles.push({ file, kind, imageId: upload.image_id, previewUrl, previewMime: file.type })
           if (upload.classification) {
-            addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+            addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} previewMime={file.type} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
             addMsg("bot", upload.classification.chat_message)
           }
         }
@@ -1520,10 +1637,10 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         for (let i = 0; i < result.uploads.length; i++) {
           const upload = result.uploads[i]
           const file = fileList[i]
-          const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined
-          newFiles.push({ file, kind, imageId: upload.image_id, previewUrl })
+          const previewUrl = makePreviewUrl(file)
+          newFiles.push({ file, kind, imageId: upload.image_id, previewUrl, previewMime: file.type })
           if (upload.classification?.chat_message) {
-            addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+            addComponent("bot", <ClassificationCard classification={upload.classification} previewUrl={previewUrl} previewMime={file.type} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
             addMsg("bot", upload.classification.chat_message)
           }
         }
@@ -1545,7 +1662,7 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
     for (const file of fileList) {
       const fileKind = (step === "upload-invoice" || step === "check-invoice") ? "pop" : inferImageKind(file.name)
       const isImage = file.type.startsWith("image/")
-      const previewUrl = isImage ? URL.createObjectURL(file) : undefined
+      const previewUrl = makePreviewUrl(file)
 
       // Resolve demo key by SHA-256 hash so any filename works for demo files
       const demoKey = await resolveDemoKey(file)
@@ -1557,10 +1674,10 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         addLog("request", `POST /api/cases/${caseId}/images`, { kind: fileKind, filename: file.name, demo: true })
         await new Promise((r) => setTimeout(r, fileKind === "pop" ? 18000 + Math.random() * 12000 : 6000 + Math.random() * 6000))
         addLog("response", `POST /api/cases/${caseId}/images`, demoResult)
-        newFiles.push({ file, kind: fileKind, imageId: demoResult.image_id, previewUrl })
+        newFiles.push({ file, kind: fileKind, imageId: demoResult.image_id, previewUrl, previewMime: file.type })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (demoResult.classification) {
-          addComponent("bot", <ClassificationCard classification={demoResult.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+          addComponent("bot", <ClassificationCard classification={demoResult.classification} previewUrl={previewUrl} previewMime={file.type} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
           addMsg("bot", demoResult.classification.chat_message)
         }
         setTimeout(scrollToBottom, 100)
@@ -1588,10 +1705,10 @@ export function ChatModal({ open, onClose, onEscalate }: ChatModalProps) {
         const minDelay = new Promise((r) => setTimeout(r, fileKind === "pop" ? 18000 + Math.random() * 30000 : 10000 + Math.random() * 26000))
         const [result] = await Promise.all([uploadImage(caseId, fileKind as "product" | "label" | "packaging" | "pop", file), minDelay])
         addLog("response", `POST /api/cases/${caseId}/images`, result)
-        newFiles.push({ file, kind: fileKind, imageId: result.image_id, previewUrl })
+        newFiles.push({ file, kind: fileKind, imageId: result.image_id, previewUrl, previewMime: file.type })
         setMessages((prev) => prev.filter((msg) => msg.timestamp !== ocrMarker))
         if (result.classification) {
-          addComponent("bot", <ClassificationCard classification={result.classification} previewUrl={previewUrl} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
+          addComponent("bot", <ClassificationCard classification={result.classification} previewUrl={previewUrl} previewMime={file.type} onImageClick={(url, cls) => setLightbox({ url, classification: cls })} />)
           addMsg("bot", result.classification.chat_message)
         } else {
           addMsg("bot", `Received ${file.name} (${fileKind}).`)
